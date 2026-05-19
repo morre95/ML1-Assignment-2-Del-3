@@ -1,0 +1,20 @@
+model: openai/gpt-5.2
+openrouter_base_url: https://openrouter.ai/api/v1
+http_referer: http://localhost
+app_title: ReAct Agent System
+prompt_dir: prompts
+session_db: sessions/agent-history.sqlite3
+recursion_limit: 40
+command_timeout_seconds: 30
+web_search_max_results: 5
+require_bash_approval: true
+prompts:
+  planner: agents/planner.j2
+  coder: agents/coder.j2
+  reviewer: agents/reviewer.j2
+  tester: agents/tester.j2
+  debugger: agents/debugger.j2
+  repo_tool: agents/repo_tool.j2
+  summary_writer: agents/summary_writer.j2
+  code_writer: agents/code_writer.j2
+  supervisor: agents/supervisor.j2

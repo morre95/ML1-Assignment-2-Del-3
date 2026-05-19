@@ -1,0 +1,18 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HOME: /tmp
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      REACT_AGENT_APP_TITLE: ${REACT_AGENT_APP_TITLE:-ReAct Agent System}
+      REACT_AGENT_HTTP_REFERER: ${REACT_AGENT_HTTP_REFERER:-http://localhost}
+      REACT_AGENT_MODEL: ${REACT_AGENT_MODEL:-openai/gpt-5.2}
+      REACT_AGENT_SESSION_DB: /workspace/sessions/agent-history.sqlite3
+    stdin_open: true
+    tty: true
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /workspace
+    volumes:
+      - .:/workspace

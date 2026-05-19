@@ -3,3 +3,18 @@
 *.swo
 *~
 ._*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local configuration and runtime state
+.env
+*.sqlite
+*.sqlite3
+sessions/
