@@ -1,0 +1,49 @@
+---
+description: Python coding standards — type hints, imports, naming, error handling, dependencies
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python Standards
+
+## General
+
+- Python 3.12+
+- Always use virtual environments (`.venv`)
+- All imports at top of file, grouped: stdlib — third-party — local (one blank line between groups)
+- Type hints on all function signatures and return types, including `-> None`
+- No mutable default arguments (`def f(items=[])` is a classic bug — use `None` and initialize inside)
+- f-strings for formatting, not `.format()` or `%`
+- Use `pathlib.Path` instead of `os.path` for file operations
+
+## Explicit Parameters
+
+- Avoid default arguments that mask behavior changes — prefer requiring callers to pass values explicitly
+- If a default is truly universal, document why it's safe
+- Never use `**kwargs` to silently forward unknown parameters — be explicit about what a function accepts
+
+## Naming
+
+- `snake_case` for functions, variables, modules
+- `PascalCase` for classes
+- `UPPER_SNAKE_CASE` for true constants only
+- Descriptive names over abbreviations — `learning_rate` not `lr` (except universally understood: `i`, `x`, `y`, `df`, `ax`)
+
+## Functions
+
+- Functions do one thing. If a docstring needs "and", consider splitting.
+- Keep functions short enough to read without scrolling
+- Use keyword arguments for functions with more than 3 parameters
+
+## Error Handling
+
+- Never use bare `except:` — always catch specific exceptions
+- Never suppress errors silently (`except: pass`)
+- Fail early with clear messages rather than silently producing wrong results
+- Use `raise ... from e` to preserve exception chains
+
+## Dependencies
+
+- Pin versions in `requirements.txt` or `pyproject.toml`
+- Prefer `uv` for package management if available, otherwise `pip`
+- Keep `requirements.txt` or `pyproject.toml` sorted alphabetically

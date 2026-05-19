@@ -1,0 +1,21 @@
+---
+description: Project-specific mistakes the agent has made before — avoid repeating them
+alwaysApply: true
+---
+
+# Common Mistakes
+
+<!--
+  This file compounds in value with every session. When the agent makes an
+  avoidable mistake, add one line here describing it. Future sessions read
+  this file and avoid repeating the same errors.
+
+  Format: "- Don't <mistake>. Instead, <correct approach>."
+  Keep entries short — one line each.
+-->
+
+<!-- EXAMPLE ENTRIES (replace with your own as you encounter real mistakes):
+- Don't use `os.path.join` in this project. Use `pathlib.Path` consistently.
+- Don't create new API response wrappers. Use `ApiResponse` from `src/core/response.ts`.
+- Don't run migrations without checking `alembic heads` first — we've had split-head issues.
+-->
