@@ -8,6 +8,19 @@ recursion_limit: 40
 command_timeout_seconds: 30
 web_search_max_results: 5
 require_bash_approval: true
+hub_url: https://wb48jtfnjng6on-8080.proxy.runpod.net
+hub_agent_name: cryptofarian-builder
+hub_agent_role: You are a concise software-building agent in a group chat.
+hub_poll_interval_seconds: 4.0
+hub_request_interval_seconds: 1.0
+hub_max_messages: 10
+hub_max_message_chars: 4096
+hub_context_messages: 20
+hub_max_input_tokens: 30000
+hub_max_output_tokens: 8000
+hub_max_cost:
+hub_input_token_cost_per_million: 0.0
+hub_output_token_cost_per_million: 0.0
 prompts:
   planner: agents/planner.j2
   coder: agents/coder.j2
@@ -18,3 +31,5 @@ prompts:
   summary_writer: agents/summary_writer.j2
   code_writer: agents/code_writer.j2
   supervisor: agents/supervisor.j2
+  hub_assessor: agents/hub_assessor.j2
+  hub_participant: agents/hub_participant.j2

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from react_agent_system.agents import build_agent_system
-from react_agent_system.config import AgentSystemConfig, DEFAULT_PROMPTS
+from react_agent_system.config import DEFAULT_PROMPTS, AgentSystemConfig
 
 
 class FakeAgent:
@@ -31,7 +31,10 @@ def test_build_agent_system_wires_specialists_and_supervisor(monkeypatch, tmp_pa
 
     system = build_agent_system(config, model=object(), checkpointer=object())
 
-    assert system.invoke("hello", thread_id="test-thread") == "planner_architect_supervisor complete"
+    assert (
+        system.invoke("hello", thread_id="test-thread")
+        == "planner_architect_supervisor complete"
+    )
     assert [call["name"] for call in calls] == [
         "summary_writer",
         "code_writer",

@@ -18,6 +18,13 @@ Required value:
 OPENROUTER_API_KEY=your-openrouter-key
 ```
 
+For RunPod hub/team mode, also set:
+
+```bash
+REACT_AGENT_HUB_PASSWORD=your-hub-password
+REACT_AGENT_HUB_AGENT_NAME=cryptofarian-builder
+```
+
 ## Run With Docker Compose
 
 Build the container:
@@ -42,6 +49,38 @@ Auto-approve safe shell commands that pass the deny-list checks:
 
 ```bash
 docker compose run --rm agent --yes-to-safe-commands "inspect the repo and run tests"
+```
+
+## RunPod Hub Team Mode
+
+Hub mode connects this agent to a shared RunPod group-chat hub. The agent polls
+messages, performs an internal relevance assessment, and only then chooses to
+stay silent, make a low bid, respond, ask for clarification, or escalate.
+
+Run hub mode with live console controls:
+
+```bash
+docker compose run --rm agent hub --agent-name cryptofarian-builder --console
+```
+
+Useful console commands:
+
+```text
+status
+pause
+resume
+budget tokens 20000
+budget cost 0.25
+rate seconds 5
+cap messages 5
+stats
+quit
+```
+
+For a bounded dry run:
+
+```bash
+docker compose run --rm agent hub --agent-name cryptofarian-builder --max-iterations 3
 ```
 
 ## File Access

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from duckduckgo_search import DDGS
 import wikipedia
+from duckduckgo_search import DDGS
 
 
 def web_search(query: str, max_results: int = 5) -> str:

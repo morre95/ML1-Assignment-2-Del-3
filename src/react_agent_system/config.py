@@ -10,7 +10,6 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-
 DEFAULT_PROMPTS = {
     "planner": "agents/planner.j2",
     "coder": "agents/coder.j2",
@@ -21,6 +20,8 @@ DEFAULT_PROMPTS = {
     "summary_writer": "agents/summary_writer.j2",
     "code_writer": "agents/code_writer.j2",
     "supervisor": "agents/supervisor.j2",
+    "hub_assessor": "agents/hub_assessor.j2",
+    "hub_participant": "agents/hub_participant.j2",
 }
 
 
@@ -40,10 +41,27 @@ class AgentSystemConfig:
     command_timeout_seconds: int = 30
     web_search_max_results: int = 5
     require_bash_approval: bool = True
+    hub_url: str = "https://wb48jtfnjng6on-8080.proxy.runpod.net"
+    hub_password: str | None = None
+    hub_agent_name: str = "cryptofarian-builder"
+    hub_agent_role: str = "You are a concise software-building agent in a group chat."
+    hub_poll_interval_seconds: float = 4.0
+    hub_request_interval_seconds: float = 1.0
+    hub_max_messages: int = 10
+    hub_max_message_chars: int = 4096
+    hub_context_messages: int = 20
+    hub_max_input_tokens: int = 30_000
+    hub_max_output_tokens: int = 8_000
+    hub_max_cost: float | None = None
+    hub_input_token_cost_per_million: float = 0.0
+    hub_output_token_cost_per_million: float = 0.0
     prompts: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PROMPTS))
 
 
-def load_config(config_path: Path | None = None, workspace: Path | None = None) -> AgentSystemConfig:
+def load_config(
+    config_path: Path | None = None,
+    workspace: Path | None = None,
+) -> AgentSystemConfig:
     """Load configuration from `.env`, optional YAML, and environment overrides."""
 
     root = (workspace or Path.cwd()).resolve()
@@ -76,7 +94,38 @@ def load_config(config_path: Path | None = None, workspace: Path | None = None) 
         recursion_limit=int(raw.get("recursion_limit", 40)),
         command_timeout_seconds=int(raw.get("command_timeout_seconds", 30)),
         web_search_max_results=int(raw.get("web_search_max_results", 5)),
-        require_bash_approval=bool(raw.get("require_bash_approval", True)),
+        require_bash_approval=_bool_from_config(raw.get("require_bash_approval", True)),
+        hub_url=os.getenv(
+            "REACT_AGENT_HUB_URL",
+            str(raw.get("hub_url", "https://wb48jtfnjng6on-8080.proxy.runpod.net")),
+        ),
+        hub_password=os.getenv("REACT_AGENT_HUB_PASSWORD") or raw.get("hub_password"),
+        hub_agent_name=os.getenv(
+            "REACT_AGENT_HUB_AGENT_NAME", str(raw.get("hub_agent_name", "cryptofarian-builder"))
+        ),
+        hub_agent_role=os.getenv(
+            "REACT_AGENT_HUB_AGENT_ROLE",
+            str(
+                raw.get(
+                    "hub_agent_role",
+                    "You are a concise software-building agent in a group chat.",
+                )
+            ),
+        ),
+        hub_poll_interval_seconds=float(raw.get("hub_poll_interval_seconds", 4.0)),
+        hub_request_interval_seconds=float(raw.get("hub_request_interval_seconds", 1.0)),
+        hub_max_messages=int(raw.get("hub_max_messages", 10)),
+        hub_max_message_chars=int(raw.get("hub_max_message_chars", 4096)),
+        hub_context_messages=int(raw.get("hub_context_messages", 20)),
+        hub_max_input_tokens=int(raw.get("hub_max_input_tokens", 30_000)),
+        hub_max_output_tokens=int(raw.get("hub_max_output_tokens", 8_000)),
+        hub_max_cost=_optional_float(raw.get("hub_max_cost")),
+        hub_input_token_cost_per_million=float(
+            raw.get("hub_input_token_cost_per_million", 0.0)
+        ),
+        hub_output_token_cost_per_million=float(
+            raw.get("hub_output_token_cost_per_million", 0.0)
+        ),
         prompts={**DEFAULT_PROMPTS, **dict(raw.get("prompts", {}))},
     )
 
@@ -96,3 +145,17 @@ def _path_from_config(raw: dict[str, Any], key: str, default: Path, root: Path) 
     if not value.is_absolute():
         value = root / value
     return value.resolve()
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value)
+
+
+def _bool_from_config(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)

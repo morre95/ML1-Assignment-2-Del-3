@@ -12,7 +12,11 @@ from react_agent_system.config import AgentSystemConfig
 from react_agent_system.llm import build_chat_model
 from react_agent_system.prompts import PromptLibrary
 from react_agent_system.session import build_sqlite_checkpointer, build_thread_config
-from react_agent_system.tools.factory import build_agent_tool, build_repo_tools, build_research_tools
+from react_agent_system.tools.factory import (
+    build_agent_tool,
+    build_repo_tools,
+    build_research_tools,
+)
 
 
 @dataclass

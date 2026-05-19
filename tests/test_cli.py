@@ -13,3 +13,12 @@ def test_cli_runs_agent_with_thread_id(monkeypatch, capsys) -> None:
 
     assert exit_code == 0
     assert "abc: write code" in capsys.readouterr().out
+
+
+def test_hub_parser_accepts_team_mode_options() -> None:
+    parser = cli.build_hub_parser()
+
+    args = parser.parse_args(["--agent-name", "cryptofarian-builder", "--max-iterations", "1"])
+
+    assert args.agent_name == "cryptofarian-builder"
+    assert args.max_iterations == 1

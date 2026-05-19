@@ -41,7 +41,8 @@ def search_text(workspace: Path, query: str, glob: str = "**/*", max_results: in
     results: list[str] = []
     for path in _iter_text_files(workspace, glob):
         relative = path.relative_to(workspace.resolve())
-        for line_number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        for line_number, line in enumerate(lines, 1):
             if query.lower() in line.lower():
                 results.append(f"{relative}:{line_number}: {line}")
                 if len(results) >= max_results:

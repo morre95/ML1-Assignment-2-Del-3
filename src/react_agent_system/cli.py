@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
-from typing import Sequence
 
 from react_agent_system.agents import build_agent_system
 from react_agent_system.bash_safety import SafetyDecision
 from react_agent_system.config import load_config
+from react_agent_system.hub.loop import build_hub_loop
 from react_agent_system.llm import OpenRouterConfigurationError
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list[:1] == ["hub"]:
+        return run_hub(args_list[1:])
+    return run_task(args_list)
+
+
+def run_task(argv: Sequence[str]) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     task = " ".join(args.task).strip()
@@ -35,6 +45,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def run_hub(argv: Sequence[str]) -> int:
+    parser = build_hub_parser()
+    args = parser.parse_args(argv)
+    config_path = Path(args.config).resolve() if args.config else None
+    config = load_config(config_path=config_path, workspace=Path.cwd())
+    if args.agent_name:
+        config = replace(config, hub_agent_name=args.agent_name)
+    if args.role:
+        config = replace(config, hub_agent_role=args.role)
+
+    approval_callback = _auto_approve if args.yes_to_safe_commands else _prompt_for_approval
+    try:
+        loop = build_hub_loop(config, approval_callback=approval_callback)
+    except (OpenRouterConfigurationError, ValueError) as exc:
+        print(exc)
+        return 2
+
+    loop.last_seen = args.since
+    if args.console:
+        loop.console.start_background_reader()
+    loop.run_forever(max_iterations=args.max_iterations)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the ReAct multi-agent system.")
     parser.add_argument("task", nargs="*", help="User task for the agent system.")
@@ -46,6 +80,41 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         help="Optional YAML config file. Defaults come from config/agents.example.yaml values.",
+    )
+    parser.add_argument(
+        "--yes-to-safe-commands",
+        action="store_true",
+        help="Auto-approve commands that pass safety checks. Dangerous commands are still blocked.",
+    )
+    return parser
+
+
+def build_hub_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run the agent in RunPod hub team mode.")
+    parser.add_argument(
+        "--agent-name",
+        help="Unique hub agent name, e.g. cryptofarian-builder.",
+    )
+    parser.add_argument("--role", help="Short role/personality for this hub participant.")
+    parser.add_argument(
+        "--config",
+        help="Optional YAML config file.",
+    )
+    parser.add_argument(
+        "--console",
+        action="store_true",
+        help="Enable live console controls: status, pause, resume, budget, stats, quit.",
+    )
+    parser.add_argument(
+        "--since",
+        type=int,
+        default=0,
+        help="Initial hub sequence number to poll from.",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        help="Stop after N poll iterations. Useful for dry runs and tests.",
     )
     parser.add_argument(
         "--yes-to-safe-commands",

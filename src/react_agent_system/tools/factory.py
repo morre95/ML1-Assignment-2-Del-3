@@ -11,7 +11,6 @@ from react_agent_system.bash_safety import ApprovalCallback, BashCommandRunner
 from react_agent_system.tools.repo import read_text_file, replace_exact_section, search_text
 from react_agent_system.tools.research import web_search, wikipedia_lookup
 
-
 AgentInvoker = Callable[[str], str]
 
 
