@@ -65,7 +65,8 @@ def load_config(
     """Load configuration from `.env`, optional YAML, and environment overrides."""
 
     root = (workspace or Path.cwd()).resolve()
-    load_dotenv(root / ".env")
+    # Mounted .env must win over empty defaults injected by Docker Compose.
+    load_dotenv(root / ".env", override=True)
     raw = _read_yaml(config_path) if config_path else {}
 
     prompt_dir = _path_from_config(raw, "prompt_dir", root / "prompts", root)

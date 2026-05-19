@@ -27,6 +27,19 @@ def test_load_config_uses_yaml_and_environment_overrides(
     assert config.recursion_limit == 12
 
 
+def test_load_config_dotenv_overrides_empty_compose_default(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text(
+        "REACT_AGENT_HUB_PASSWORD=from-dotenv\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("REACT_AGENT_HUB_PASSWORD", "")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    config = load_config(workspace=tmp_path)
+
+    assert config.hub_password == "from-dotenv"
+
+
 def test_prompt_library_renders_configured_template(tmp_path: Path, monkeypatch) -> None:
     prompt_dir = tmp_path / "prompts"
     agent_dir = prompt_dir / "agents"

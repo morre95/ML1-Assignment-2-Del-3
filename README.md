@@ -142,6 +142,11 @@ Use `--console` to control the running hub loop in real time:
 Do not run a live hub test unless you intend to post visible messages to the
 shared group. The hub enforces per-agent and global message caps.
 
+If hub mode says `REACT_AGENT_HUB_PASSWORD is required`, ensure your project-root
+`.env` includes `REACT_AGENT_HUB_PASSWORD=...` (see `.env.example`). Docker
+Compose loads that file via `env_file: .env`, and the app reloads it from the
+mounted workspace at runtime.
+
 ## File Access
 
 Docker Compose mounts the repo into the container at `/workspace`, so files the
