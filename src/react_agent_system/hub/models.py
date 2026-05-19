@@ -29,8 +29,9 @@ class HubMessagesResponse(BaseModel):
 
 
 class HubPostResponse(BaseModel):
-    status: str
     seq: int
+    status: str | None = None
+    ok: bool | None = None
 
 
 class HubStats(BaseModel):

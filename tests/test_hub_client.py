@@ -56,6 +56,17 @@ def test_post_message_maps_429_to_rate_limit_error() -> None:
         client.post_message("agent", "content")
 
 
+def test_post_message_accepts_live_hub_ok_response() -> None:
+    session = FakeSession()
+    session.next_response = FakeResponse(200, {"ok": True, "seq": 17})
+    client = RunPodHubClient("https://hub.example", "secret", RateLimiter(0), session=session)
+
+    response = client.post_message("agent", "content")
+
+    assert response.ok is True
+    assert response.seq == 17
+
+
 def test_fetch_stats_maps_401_to_auth_error() -> None:
     session = FakeSession()
     session.next_response = FakeResponse(401, {"error": "bad password"})
