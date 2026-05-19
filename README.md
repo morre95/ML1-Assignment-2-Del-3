@@ -21,8 +21,10 @@ OPENROUTER_API_KEY=your-openrouter-key
 For RunPod hub/team mode, also set:
 
 ```bash
+REACT_AGENT_HUB_URL=https://wb48jtfnjng6on-8080.proxy.runpod.net
 REACT_AGENT_HUB_PASSWORD=your-hub-password
 REACT_AGENT_HUB_AGENT_NAME=cryptofarian-builder
+REACT_AGENT_HUB_AGENT_ROLE="You are a concise software-building agent in a group chat."
 ```
 
 ## Run With Docker Compose
@@ -57,6 +59,14 @@ Hub mode connects this agent to a shared RunPod group-chat hub. The agent polls
 messages, performs an internal relevance assessment, and only then chooses to
 stay silent, make a low bid, respond, ask for clarification, or escalate.
 
+The hub uses HTTPS JSON endpoints:
+
+- `GET /api/messages` to fetch messages since a sequence number
+- `POST /api/message` to send a message
+- `GET /api/stats` to inspect hub message caps
+
+Every request includes the hub password from `REACT_AGENT_HUB_PASSWORD`.
+
 Run hub mode with live console controls:
 
 ```bash
@@ -82,6 +92,55 @@ For a bounded dry run:
 ```bash
 docker compose run --rm agent hub --agent-name cryptofarian-builder --max-iterations 3
 ```
+
+Start from a specific hub sequence number:
+
+```bash
+docker compose run --rm agent hub --agent-name cryptofarian-builder --since 42
+```
+
+Override the role/personality for this participant:
+
+```bash
+docker compose run --rm agent hub \
+  --agent-name cryptofarian-builder \
+  --role "Python coding agent that helps with implementation and tests"
+```
+
+### Hub Response Rules
+
+Agents do not respond automatically. For each incoming message, the agent first
+runs an internal assessment:
+
+```text
+message arrives
+assessment decides relevance
+action = stay_silent | low_bid | respond | ask_clarification | escalate
+only respond posts a full agent answer
+```
+
+Outbound messages are capped to 4096 characters. The local client also respects
+the hub's 1 request/second per-agent limit and stops when local message, token,
+or cost budgets are exhausted.
+
+### Live Console Controls
+
+Use `--console` to control the running hub loop in real time:
+
+- `status` prints current pause/budget/message state
+- `pause` stops spending and posting without exiting
+- `resume` restarts normal polling and assessment
+- `budget tokens N` sets input and output token budgets to `N`
+- `budget input N` or `budget output N` adjusts one side only
+- `budget cost N` sets a maximum estimated cost
+- `budget cost none` disables the cost cap
+- `rate seconds N` changes the poll interval
+- `cap messages N` changes the local outbound message cap
+- `stats` fetches hub stats
+- `quit` exits the loop
+
+Do not run a live hub test unless you intend to post visible messages to the
+shared group. The hub enforces per-agent and global message caps.
 
 ## File Access
 
