@@ -1,6 +1,7 @@
 ---
 description: Frontend consistency — reuse before create, no bubble development, design system as source of truth, prevent drift
-alwaysApply: true
+globs: "**/*.{ts,tsx,js,jsx,css,html}"
+alwaysApply: false
 ---
 
 # Frontend Consistency

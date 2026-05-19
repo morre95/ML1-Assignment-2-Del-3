@@ -6,36 +6,48 @@ alwaysApply: true
 # Project Instructions
 
 ## Commands
-<!-- Add your actual build/test/lint commands here -->
-- Build: `npm run build`
-- Test: `npm test`
-- Lint: `npm run lint -- --fix`
-- Single test: `npm test -- --grep "test name"`
+- Build Docker image: `docker compose build agent`
+- Run one-shot task: `docker compose run --rm agent "your task here"`
+- Run hub/team mode: `docker compose run --rm agent hub --agent-name cryptofarian-builder --console`
+- Local test: `python -m pytest`
+- Container test: `docker compose run --rm --entrypoint /bin/sh agent -lc 'python -m pip install --user pytest >/tmp/dev-install.log && python -m pytest'`
+- Lint: `ruff check .`
+- Container lint: `docker compose run --rm --entrypoint /bin/sh agent -lc 'python -m pip install --user ruff >/tmp/dev-install.log && /tmp/.local/bin/ruff check .'`
+- Syntax check: `python -m compileall src tests`
 
 ## Code Style
-<!-- Only list conventions that differ from language defaults -->
-- Use ES modules (import/export), not CommonJS (require)
-- Prefer named exports over default exports
-- Use TypeScript strict mode
+- Python 3.12+ with full type hints.
+- Keep imports formatted with Ruff (`I`, `E`, `F`, `UP`, `B`, `SIM` are enabled).
+- Store agent prompts as Jinja2 templates in `prompts/agents/`; do not hardcode system prompts in Python.
+- Keep hub passwords and OpenRouter keys in `.env` or environment variables only.
 
 ## Workflow
 - Run lint and tests before committing
 - Write descriptive commit messages in imperative mood
 - Create feature branches, never commit directly to main
+- Do not perform live RunPod hub tests unless explicitly approved; hub posts are visible to the group and capped.
+- Do not edit plan files in `/home/cryptofarian/.cursor/plans/` unless the user explicitly asks.
 
 ## Architecture
-<!-- Key decisions the agent can't infer from code alone -->
-- API routes live in `src/api/`, business logic in `src/services/`
-- Database access through repository pattern in `src/repositories/`
-- Shared types in `src/types/`
+- Package code lives in `src/react_agent_system/`.
+- `src/react_agent_system/agents.py` builds the LangGraph ReAct agent system.
+- `src/react_agent_system/tools/` contains repository, research, bash, and agent-wrapper tools.
+- `src/react_agent_system/hub/` contains RunPod hub team mode: client, limiter, budget, assessment, console, and loop.
+- `prompts/agents/` contains Jinja2 prompt templates for all agent roles.
+- `config/agents.example.yaml` and `.env.example` document runtime configuration.
+- `compose.yaml` runs the CLI container with the repo mounted at `/workspace`.
 
 ## Platform / Environment
-<!-- Fill in your setup so the agent doesn't suggest incompatible solutions -->
-- OS: (e.g., Linux x86_64, macOS ARM)
-- Runtime: (e.g., Python 3.12, Node 20)
-- Package manager: (e.g., uv, npm, pnpm)
+- Runtime: Python 3.12+
+- Package metadata: `pyproject.toml`
+- Container runtime: Docker Compose service `agent`
+- LLM provider: OpenRouter via LangChain OpenAI-compatible chat model
+- Session persistence: SQLite checkpointer under `sessions/`
 
 ## Gotchas
-<!-- Non-obvious behaviors, environment quirks, common mistakes -->
-- The test database resets between runs — don't rely on seed data
-- Environment variables must be prefixed with `VITE_` for frontend access
+- Host Python may not have `pip`, `pytest`, `ruff`, or `uv`; use containerized test/lint commands when needed.
+- `docker compose run --rm agent ...` uses the image entrypoint `react-agent`.
+- For shell access in the slim Python image, use `/bin/sh`, not `/bin/bash`.
+- The repo is bind-mounted into the container at `/workspace`; file writes there affect the host repo.
+- Hub mode requires `REACT_AGENT_HUB_PASSWORD`; one-shot task mode requires `OPENROUTER_API_KEY`.
+- Hub mode must assess relevance before responding; agents must not auto-reply to every group message.

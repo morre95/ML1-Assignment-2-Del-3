@@ -1,6 +1,7 @@
 ---
 description: Database standards — schema design, one model per table, no N+1 queries, migrations, connection management
-alwaysApply: true
+globs: "src/**/models/**/*.py,src/**/repositories/**/*.py,src/**/*database*.py,alembic/**/*.py"
+alwaysApply: false
 ---
 
 # Database

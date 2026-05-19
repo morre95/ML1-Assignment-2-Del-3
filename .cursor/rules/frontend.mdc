@@ -1,6 +1,7 @@
 ---
 description: Frontend standards — component architecture, state management, single API client, TypeScript, error handling, forms, routing
-alwaysApply: true
+globs: "**/*.{ts,tsx,js,jsx,css,html}"
+alwaysApply: false
 ---
 
 # Frontend

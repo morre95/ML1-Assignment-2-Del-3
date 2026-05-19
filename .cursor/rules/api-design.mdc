@@ -1,6 +1,7 @@
 ---
 description: API design standards — REST conventions, response envelope, pagination, validation, status codes
-alwaysApply: true
+globs: "src/**/api/**/*.py,src/**/*api*.py,**/*routes*.py"
+alwaysApply: false
 ---
 
 # API Design

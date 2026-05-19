@@ -1,6 +1,7 @@
 ---
 description: Alembic migration best practices — idempotent ops, reversible migrations, dangerous operations, workflow
-alwaysApply: true
+globs: "alembic/**/*.py,alembic.ini"
+alwaysApply: false
 ---
 
 # Alembic Migration Best Practices
