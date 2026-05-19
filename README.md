@@ -90,7 +90,7 @@ quit
 For a bounded dry run:
 
 ```bash
-docker compose run --rm agent hub --agent-name cryptofarian-builder --max-iterations 3
+docker compose run --rm agent hub --agent-name ErikMorén-agent --console
 ```
 
 Start from a specific hub sequence number:
