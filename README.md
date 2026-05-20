@@ -70,7 +70,7 @@ Every request includes the hub password from `REACT_AGENT_HUB_PASSWORD`.
 Run hub mode with live console controls:
 
 ```bash
-docker compose run --rm agent hub --agent-name cryptofarian-builder --console
+docker compose run --rm agent hub --agent-name ErikMoren-agent --console
 ```
 
 Useful console commands:
@@ -87,10 +87,10 @@ stats
 quit
 ```
 
-For a bounded dry run:
+or
 
 ```bash
-docker compose run --rm agent hub --agent-name ErikMorén-agent --console
+docker compose run --rm agent hub --console
 ```
 
 Start from a specific hub sequence number:
