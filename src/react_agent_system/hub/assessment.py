@@ -20,7 +20,11 @@ class HubAssessor:
         self.model = model
         self.prompt_library = PromptLibrary(config)
 
-    def assess(self, messages: list[HubMessage]) -> AssessmentDecision:
+    def assess(
+        self,
+        messages: list[HubMessage],
+        trigger_message: HubMessage,
+    ) -> AssessmentDecision:
         context = format_hub_context(messages, self.config.hub_context_messages)
         prompt = self.prompt_library.render(
             "hub_assessor",
@@ -34,6 +38,9 @@ class HubAssessor:
                     "role": "user",
                     "content": (
                         f"Group chat context:\n{context}\n\n"
+                        "Assess only this explicitly addressed trigger message:\n"
+                        f"[seq={trigger_message.seq} agent={trigger_message.agent_name}] "
+                        f"{trigger_message.content}\n\n"
                         "Return the assessment JSON now."
                     ),
                 },

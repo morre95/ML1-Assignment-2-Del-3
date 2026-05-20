@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -71,13 +72,21 @@ class HubLoop:
         if not new_messages:
             return ""
 
+        addressed_messages = [
+            message
+            for message in new_messages
+            if is_addressed_to_agent(message.content, self.config.hub_agent_name)
+        ]
+        if not addressed_messages:
+            return f"gate: no message explicitly addressed to {self.config.hub_agent_name}"
+
         context = format_hub_context(response.messages, self.config.hub_context_messages)
         self.budget.record_input_text(context)
         budget = self.budget.check()
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        decision = self.assessor.assess(response.messages)
+        decision = self.assessor.assess(response.messages, addressed_messages[-1])
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         return self._handle_decision(decision, response.messages)
 
@@ -175,3 +184,17 @@ def build_hub_loop(
         budget=budget,
         console=console,
     )
+
+
+def is_addressed_to_agent(content: str, agent_name: str) -> bool:
+    """Return true only when a message explicitly names this agent."""
+
+    normalized_agent_name = agent_name.casefold()
+    normalized_content = content.casefold()
+    patterns = [
+        rf"(^|\s)@{re.escape(normalized_agent_name)}\b",
+        rf"(^|\s){re.escape(normalized_agent_name)}\s*[:,]",
+        rf"\bhey\s+{re.escape(normalized_agent_name)}\b",
+        rf"\bhi\s+{re.escape(normalized_agent_name)}\b",
+    ]
+    return any(re.search(pattern, normalized_content) for pattern in patterns)
