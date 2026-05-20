@@ -189,12 +189,18 @@ def build_hub_loop(
 def is_addressed_to_agent(content: str, agent_name: str) -> bool:
     """Return true only when a message explicitly names this agent."""
 
-    normalized_agent_name = agent_name.casefold()
+    normalized_agent_name = agent_name.strip().casefold()
+    if not normalized_agent_name:
+        return False
+
     normalized_content = content.casefold()
+    escaped_agent_name = re.escape(normalized_agent_name)
+    name_boundary = r"(?![\w-])"
     patterns = [
-        rf"(^|\s)@{re.escape(normalized_agent_name)}\b",
-        rf"(^|\s){re.escape(normalized_agent_name)}\s*[:,]",
-        rf"\bhey\s+{re.escape(normalized_agent_name)}\b",
-        rf"\bhi\s+{re.escape(normalized_agent_name)}\b",
+        rf"(^|\s)@{escaped_agent_name}{name_boundary}",
+        rf"(^|\s){escaped_agent_name}{name_boundary}\s*[:,]",
+        rf"(^|\n)\s*{escaped_agent_name}{name_boundary}\s+\S+",
+        rf"\bhey\s+{escaped_agent_name}{name_boundary}",
+        rf"\bhi\s+{escaped_agent_name}{name_boundary}",
     ]
     return any(re.search(pattern, normalized_content) for pattern in patterns)

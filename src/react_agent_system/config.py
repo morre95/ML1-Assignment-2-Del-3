@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 DEFAULT_PROMPTS = {
     "planner": "agents/planner.j2",
@@ -65,15 +66,14 @@ def load_config(
     """Load configuration from `.env`, optional YAML, and environment overrides."""
 
     root = (workspace or Path.cwd()).resolve()
-    # Mounted .env must win over empty defaults injected by Docker Compose.
-    load_dotenv(root / ".env", override=True)
+    dotenv = dotenv_values(root / ".env")
     raw = _read_yaml(config_path) if config_path else {}
 
     prompt_dir = _path_from_config(raw, "prompt_dir", root / "prompts", root)
     session_db = _path_from_config(
         raw,
         "session_db",
-        Path(os.getenv("REACT_AGENT_SESSION_DB", "sessions/agent-history.sqlite3")),
+            Path(_env_value("REACT_AGENT_SESSION_DB", dotenv, "sessions/agent-history.sqlite3")),
         root,
     )
 
@@ -81,31 +81,41 @@ def load_config(
         workspace=root,
         prompt_dir=prompt_dir,
         session_db=session_db,
-        model=os.getenv("REACT_AGENT_MODEL", str(raw.get("model", "openai/gpt-5.2"))),
-        openrouter_api_key=os.getenv("OPENROUTER_API_KEY") or raw.get("openrouter_api_key"),
+        model=_env_value("REACT_AGENT_MODEL", dotenv, str(raw.get("model", "openai/gpt-5.2"))),
+        openrouter_api_key=_env_value("OPENROUTER_API_KEY", dotenv) or raw.get(
+            "openrouter_api_key"
+        ),
         openrouter_base_url=str(
             raw.get("openrouter_base_url", "https://openrouter.ai/api/v1")
         ),
-        http_referer=os.getenv(
-            "REACT_AGENT_HTTP_REFERER", str(raw.get("http_referer", "http://localhost"))
+        http_referer=_env_value(
+            "REACT_AGENT_HTTP_REFERER",
+            dotenv,
+            str(raw.get("http_referer", "http://localhost")),
         ),
-        app_title=os.getenv(
-            "REACT_AGENT_APP_TITLE", str(raw.get("app_title", "ReAct Agent System"))
+        app_title=_env_value(
+            "REACT_AGENT_APP_TITLE",
+            dotenv,
+            str(raw.get("app_title", "ReAct Agent System")),
         ),
         recursion_limit=int(raw.get("recursion_limit", 40)),
         command_timeout_seconds=int(raw.get("command_timeout_seconds", 30)),
         web_search_max_results=int(raw.get("web_search_max_results", 5)),
         require_bash_approval=_bool_from_config(raw.get("require_bash_approval", True)),
-        hub_url=os.getenv(
+        hub_url=_env_value(
             "REACT_AGENT_HUB_URL",
+            dotenv,
             str(raw.get("hub_url", "https://wb48jtfnjng6on-8080.proxy.runpod.net")),
         ),
-        hub_password=os.getenv("REACT_AGENT_HUB_PASSWORD") or raw.get("hub_password"),
-        hub_agent_name=os.getenv(
-            "REACT_AGENT_HUB_AGENT_NAME", str(raw.get("hub_agent_name", "cryptofarian-builder"))
+        hub_password=_env_value("REACT_AGENT_HUB_PASSWORD", dotenv) or raw.get("hub_password"),
+        hub_agent_name=_env_value(
+            "REACT_AGENT_HUB_AGENT_NAME",
+            dotenv,
+            str(raw.get("hub_agent_name", "cryptofarian-builder")),
         ),
-        hub_agent_role=os.getenv(
+        hub_agent_role=_env_value(
             "REACT_AGENT_HUB_AGENT_ROLE",
+            dotenv,
             str(
                 raw.get(
                     "hub_agent_role",
@@ -139,6 +149,20 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Config file must contain a YAML mapping at the top level.")
     return data
+
+
+def _env_value(
+    name: str,
+    dotenv: Mapping[str, str | None],
+    default: str | None = None,
+) -> str | None:
+    environment_value = os.environ.get(name)
+    if environment_value:
+        return environment_value
+    dotenv_value = dotenv.get(name)
+    if dotenv_value:
+        return dotenv_value
+    return default
 
 
 def _path_from_config(raw: dict[str, Any], key: str, default: Path, root: Path) -> Path:

@@ -16,3 +16,27 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+
+  fake-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - python
+      - -m
+      - react_agent_system.hub.fake_server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8089"
+      - --password
+      - dev-hub-password
+    entrypoint: []
+    ports:
+      - "8089:8089"
+    environment:
+      HOME: /tmp
+      PYTHONPATH: /workspace/src
+    working_dir: /workspace
+    volumes:
+      - .:/workspace

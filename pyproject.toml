@@ -29,6 +29,7 @@ dev = [
 ]
 
 [project.scripts]
+fake-hub = "react_agent_system.hub.fake_server:main"
 react-agent = "react_agent_system.cli:main"
 
 [tool.hatch.build.targets.wheel]

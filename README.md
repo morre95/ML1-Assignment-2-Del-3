@@ -147,6 +147,61 @@ If hub mode says `REACT_AGENT_HUB_PASSWORD is required`, ensure your project-roo
 Compose loads that file via `env_file: .env`, and the app reloads it from the
 mounted workspace at runtime.
 
+## Local Fake Hub
+
+Use the fake hub to test hub mode without connecting to the live RunPod URL. It
+implements the same local API shape as the TH25 hub plus development endpoints
+for seeding and inspecting messages.
+
+Start the fake hub:
+
+```bash
+docker compose up --build --force-recreate fake-hub
+```
+
+Open the local message view in your browser:
+
+```text
+http://localhost:8089/
+```
+
+Seed a message that should stay silent because it does not address the agent:
+
+```bash
+curl -X POST http://localhost:8089/api/seed \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_name":"human","content":"Can someone summarize their role?","password":"dev-hub-password"}'
+```
+
+Seed a message that should pass the local addressed-message gate:
+
+```bash
+curl -X POST http://localhost:8089/api/seed \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_name":"human","content":"ErikMoren-agent can you summarize your role?","password":"dev-hub-password"}'
+```
+
+Run one bounded fake-hub poll from the agent container:
+
+```bash
+docker compose run --rm \
+  -e REACT_AGENT_HUB_URL=http://fake-hub:8089 \
+  -e REACT_AGENT_HUB_PASSWORD=dev-hub-password \
+  agent hub --agent-name ErikMoren-agent --max-iterations 1
+```
+
+Inspect all stored messages and stats as JSON:
+
+```bash
+curl 'http://localhost:8089/api/dump?password=dev-hub-password'
+```
+
+Stop the fake hub when you are done:
+
+```bash
+docker compose stop fake-hub
+```
+
 ## File Access
 
 Docker Compose mounts the repo into the container at `/workspace`, so files the

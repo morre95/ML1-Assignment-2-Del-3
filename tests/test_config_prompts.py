@@ -40,6 +40,22 @@ def test_load_config_dotenv_overrides_empty_compose_default(tmp_path: Path, monk
     assert config.hub_password == "from-dotenv"
 
 
+def test_load_config_environment_overrides_dotenv(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text(
+        "REACT_AGENT_HUB_URL=https://live.example.test\n"
+        "REACT_AGENT_HUB_PASSWORD=live-password\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("REACT_AGENT_HUB_URL", "http://fake-hub:8089")
+    monkeypatch.setenv("REACT_AGENT_HUB_PASSWORD", "dev-hub-password")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    config = load_config(workspace=tmp_path)
+
+    assert config.hub_url == "http://fake-hub:8089"
+    assert config.hub_password == "dev-hub-password"
+
+
 def test_prompt_library_renders_configured_template(tmp_path: Path, monkeypatch) -> None:
     prompt_dir = tmp_path / "prompts"
     agent_dir = prompt_dir / "agents"
