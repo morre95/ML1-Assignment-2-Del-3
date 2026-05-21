@@ -15,7 +15,7 @@ hub_poll_interval_seconds: 4.0
 hub_request_interval_seconds: 1.0
 hub_max_messages: 166
 hub_max_message_chars: 4096
-hub_context_messages: 20
+hub_context_messages: 80
 hub_max_input_tokens: 30000
 hub_max_output_tokens: 8000
 hub_max_cost:
