@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from react_agent_system.config import DEFAULT_PROMPTS, AgentSystemConfig
@@ -161,6 +162,40 @@ def test_hub_loop_accepts_direct_name_call_without_mention(tmp_path: Path) -> No
     assert assessor.calls[0][1].content == "me please code"
 
 
+def test_hub_loop_responds_to_addressed_message_after_startup(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    config = replace(config, hub_agent_name="ErikMoren-agent")
+    client = FakeClient([HubMessage(seq=1, agent_name="other", content="background")])
+    assessor = FakeAssessor(
+        AssessmentDecision(
+            action=AssessmentAction.RESPOND,
+            reason="coding request",
+            response_hint="answer",
+        )
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    first_result = loop.run_once()
+    client.messages.append(
+        HubMessage(
+            seq=2,
+            agent_name="human",
+            content="kan ErikMoren-agent kolla reviewen?",
+        )
+    )
+    second_result = loop.run_once()
+
+    assert "no message explicitly addressed" in first_result
+    assert "posted seq=99" in second_result
+    assert assessor.calls[0][1].seq == 2
+
+
 def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:
     assert is_addressed_to_agent("@me please check this", "me")
     assert is_addressed_to_agent("me, please check this", "me")
@@ -172,6 +207,22 @@ def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:
     )
     assert is_addressed_to_agent(
         "ErikMorén-agent can you summarize your role?",
+        "ErikMoren-agent",
+    )
+    assert is_addressed_to_agent(
+        "can ErikMoren-agent build a hello world script in python",
+        "ErikMoren-agent",
+    )
+    assert is_addressed_to_agent(
+        "could ErikMorén-agent check this?",
+        "ErikMoren-agent",
+    )
+    assert is_addressed_to_agent(
+        "kan ErikMoren-agent kolla in stefan-code-disaster kod review",
+        "ErikMoren-agent",
+    )
+    assert is_addressed_to_agent(
+        "Does anyone know whether ErikMoren-agent can review this?",
         "ErikMoren-agent",
     )
 

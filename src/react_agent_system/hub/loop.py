@@ -198,10 +198,19 @@ def is_addressed_to_agent(content: str, agent_name: str) -> bool:
     normalized_content = _normalize_address_text(content)
     escaped_agent_name = re.escape(normalized_agent_name)
     name_boundary = r"(?![\w-])"
+    if _is_distinct_agent_name(normalized_agent_name):
+        return bool(
+            re.search(
+                rf"(^|[^\w-]){escaped_agent_name}{name_boundary}",
+                normalized_content,
+            )
+        )
+
     patterns = [
         rf"(^|\s)@{escaped_agent_name}{name_boundary}",
         rf"(^|\s){escaped_agent_name}{name_boundary}\s*[:,]",
         rf"(^|\n)\s*{escaped_agent_name}{name_boundary}\s+\S+",
+        rf"\b(can|could|would|will)\s+{escaped_agent_name}{name_boundary}\s+\S+",
         rf"\bhey\s+{escaped_agent_name}{name_boundary}",
         rf"\bhi\s+{escaped_agent_name}{name_boundary}",
     ]
@@ -214,3 +223,7 @@ def _normalize_address_text(value: str) -> str:
         character for character in decomposed if not unicodedata.combining(character)
     )
     return without_diacritics.casefold()
+
+
+def _is_distinct_agent_name(normalized_agent_name: str) -> bool:
+    return "-" in normalized_agent_name or len(normalized_agent_name) >= 8
