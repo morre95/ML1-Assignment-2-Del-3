@@ -10,7 +10,7 @@ from langchain_core.tools import BaseTool, tool
 from react_agent_system.bash_safety import ApprovalCallback, BashCommandRunner
 from react_agent_system.tools.github import fetch_github_pull_request_context
 from react_agent_system.tools.repo import read_text_file, replace_exact_section, search_text
-from react_agent_system.tools.research import web_search, wikipedia_lookup
+from react_agent_system.tools.research import weather_lookup, web_search, wikipedia_lookup
 
 AgentInvoker = Callable[[str], str]
 
@@ -30,7 +30,13 @@ def build_research_tools(max_web_results: int) -> list[BaseTool]:
 
         return wikipedia_lookup(query)
 
-    return [web_search_tool, wikipedia_lookup_tool]
+    @tool("weather_lookup")
+    def weather_lookup_tool(location: str) -> str:
+        """Look up current weather for a city or location."""
+
+        return weather_lookup(location)
+
+    return [web_search_tool, wikipedia_lookup_tool, weather_lookup_tool]
 
 
 def build_github_tools() -> list[BaseTool]:
