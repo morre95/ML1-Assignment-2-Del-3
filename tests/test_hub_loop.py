@@ -105,6 +105,37 @@ def test_hub_loop_responds_and_posts(tmp_path: Path) -> None:
     assert assessor.calls[0][1].content == "@me please code"
 
 
+def test_hub_loop_handles_newest_first_hub_messages(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient(
+        [
+            HubMessage(seq=3, agent_name="other", content="@me current request"),
+            HubMessage(seq=2, agent_name="other", content="@me old request"),
+            HubMessage(seq=1, agent_name="other", content="background"),
+        ]
+    )
+    assessor = FakeAssessor(
+        AssessmentDecision(
+            action=AssessmentAction.RESPOND,
+            reason="coding request",
+            response_hint="answer",
+        )
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "posted seq=99" in result
+    assert loop.last_seen == 3
+    assert assessor.calls[0][1].seq == 3
+
+
 def test_hub_loop_accepts_direct_name_call_without_mention(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     client = FakeClient([HubMessage(seq=1, agent_name="other", content="me please code")])
@@ -137,6 +168,10 @@ def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:
     assert is_addressed_to_agent("Hey me can you check this?", "me")
     assert is_addressed_to_agent(
         "ErikMoren-agent can you summarize your role?",
+        "ErikMoren-agent",
+    )
+    assert is_addressed_to_agent(
+        "ErikMorén-agent can you summarize your role?",
         "ErikMoren-agent",
     )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -63,10 +64,11 @@ class HubLoop:
         if not response.messages:
             return ""
 
-        self.last_seen = response.messages[-1].seq
+        messages = sorted(response.messages, key=lambda message: message.seq)
+        self.last_seen = max(message.seq for message in messages)
         new_messages = [
             message
-            for message in response.messages
+            for message in messages
             if message.agent_name != self.config.hub_agent_name
         ]
         if not new_messages:
@@ -80,15 +82,15 @@ class HubLoop:
         if not addressed_messages:
             return f"gate: no message explicitly addressed to {self.config.hub_agent_name}"
 
-        context = format_hub_context(response.messages, self.config.hub_context_messages)
+        context = format_hub_context(messages, self.config.hub_context_messages)
         self.budget.record_input_text(context)
         budget = self.budget.check()
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        decision = self.assessor.assess(response.messages, addressed_messages[-1])
+        decision = self.assessor.assess(messages, addressed_messages[-1])
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
-        return self._handle_decision(decision, response.messages)
+        return self._handle_decision(decision, messages)
 
     def _handle_decision(self, decision: AssessmentDecision, messages: list[HubMessage]) -> str:
         match decision.action:
@@ -189,11 +191,11 @@ def build_hub_loop(
 def is_addressed_to_agent(content: str, agent_name: str) -> bool:
     """Return true only when a message explicitly names this agent."""
 
-    normalized_agent_name = agent_name.strip().casefold()
+    normalized_agent_name = _normalize_address_text(agent_name.strip())
     if not normalized_agent_name:
         return False
 
-    normalized_content = content.casefold()
+    normalized_content = _normalize_address_text(content)
     escaped_agent_name = re.escape(normalized_agent_name)
     name_boundary = r"(?![\w-])"
     patterns = [
@@ -204,3 +206,11 @@ def is_addressed_to_agent(content: str, agent_name: str) -> bool:
         rf"\bhi\s+{escaped_agent_name}{name_boundary}",
     ]
     return any(re.search(pattern, normalized_content) for pattern in patterns)
+
+
+def _normalize_address_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value)
+    without_diacritics = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    return without_diacritics.casefold()
