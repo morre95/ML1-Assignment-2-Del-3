@@ -8,6 +8,7 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, tool
 
 from react_agent_system.bash_safety import ApprovalCallback, BashCommandRunner
+from react_agent_system.tools.github import fetch_github_pull_request_context
 from react_agent_system.tools.repo import read_text_file, replace_exact_section, search_text
 from react_agent_system.tools.research import web_search, wikipedia_lookup
 
@@ -30,6 +31,18 @@ def build_research_tools(max_web_results: int) -> list[BaseTool]:
         return wikipedia_lookup(query)
 
     return [web_search_tool, wikipedia_lookup_tool]
+
+
+def build_github_tools() -> list[BaseTool]:
+    """Create read-only GitHub pull request inspection tools."""
+
+    @tool("fetch_github_pr_context")
+    def fetch_github_pr_context_tool(pr_url: str) -> str:
+        """Fetch read-only context for a GitHub pull request URL."""
+
+        return fetch_github_pull_request_context(pr_url)
+
+    return [fetch_github_pr_context_tool]
 
 
 def build_repo_tools(

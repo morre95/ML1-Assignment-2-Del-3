@@ -14,6 +14,7 @@ from react_agent_system.prompts import PromptLibrary
 from react_agent_system.session import build_sqlite_checkpointer, build_thread_config
 from react_agent_system.tools.factory import (
     build_agent_tool,
+    build_github_tools,
     build_repo_tools,
     build_research_tools,
 )
@@ -50,6 +51,7 @@ def build_agent_system(
         approval_callback=approval_callback,
     )
     research_tools = build_research_tools(config.web_search_max_results)
+    github_tools = build_github_tools()
 
     summary_agent = create_react_agent(
         model=chat_model,
@@ -89,7 +91,7 @@ def build_agent_system(
     )
     reviewer_agent = create_react_agent(
         model=chat_model,
-        tools=repo_tools + [summary_tool],
+        tools=repo_tools + github_tools + [summary_tool],
         name="reviewer",
         prompt=prompt_library.render("reviewer"),
     )
@@ -112,7 +114,7 @@ def build_agent_system(
         prompt=prompt_library.render("repo_tool"),
     )
 
-    supervisor_tools = repo_tools + research_tools + [
+    supervisor_tools = repo_tools + research_tools + github_tools + [
         build_agent_tool(
             "ask_planner",
             "Ask the planner/architect agent to break down a user request.",
