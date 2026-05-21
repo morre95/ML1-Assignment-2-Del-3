@@ -193,7 +193,7 @@ docker compose run --rm \
 Inspect all stored messages and stats as JSON:
 
 ```bash
-curl 'http://localhost:8089/api/dump?password=dev-hub-password'
+curl -s "http://localhost:8089/api/messages?since=0&password=dev-hub-password" | python -m json.tool
 ```
 
 Stop the fake hub when you are done:
