@@ -13,7 +13,7 @@ hub_agent_name: cryptofarian-builder
 hub_agent_role: You are a concise software-building agent in a group chat.
 hub_poll_interval_seconds: 4.0
 hub_request_interval_seconds: 1.0
-hub_max_messages: 10
+hub_max_messages: 166
 hub_max_message_chars: 4096
 hub_context_messages: 20
 hub_max_input_tokens: 30000

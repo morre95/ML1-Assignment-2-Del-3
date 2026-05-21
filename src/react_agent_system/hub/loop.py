@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import time
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from react_agent_system.agents import AgentSystem, build_agent_system
@@ -37,6 +37,7 @@ class HubLoop:
     budget: BudgetController
     console: ConsoleController | None = None
     last_seen: int = 0
+    message_history: list[HubMessage] = field(default_factory=list)
 
     def run_forever(self, max_iterations: int | None = None) -> None:
         iterations = 0
@@ -65,6 +66,7 @@ class HubLoop:
             return ""
 
         messages = sorted(response.messages, key=lambda message: message.seq)
+        self._remember_messages(messages)
         self.last_seen = max(message.seq for message in messages)
         new_messages = [
             message
@@ -74,23 +76,25 @@ class HubLoop:
         if not new_messages:
             return ""
 
-        addressed_messages = [
+        trigger_messages = [
             message
             for message in new_messages
             if is_addressed_to_agent(message.content, self.config.hub_agent_name)
+            or self._is_reply_to_pending_question(message)
         ]
-        if not addressed_messages:
+        if not trigger_messages:
             return f"gate: no message explicitly addressed to {self.config.hub_agent_name}"
 
-        context = format_hub_context(messages, self.config.hub_context_messages)
+        context_messages = self._recent_messages()
+        context = format_hub_context(context_messages, self.config.hub_context_messages)
         self.budget.record_input_text(context)
         budget = self.budget.check()
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        decision = self.assessor.assess(messages, addressed_messages[-1])
+        decision = self.assessor.assess(context_messages, trigger_messages[-1])
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
-        return self._handle_decision(decision, messages)
+        return self._handle_decision(decision, context_messages)
 
     def _handle_decision(self, decision: AssessmentDecision, messages: list[HubMessage]) -> str:
         match decision.action:
@@ -146,8 +150,37 @@ class HubLoop:
         except HubClientError as exc:
             return f"hub post failed: {exc}"
 
+        self._remember_messages(
+            [HubMessage(seq=response.seq, agent_name=self.config.hub_agent_name, content=trimmed)]
+        )
         self.budget.record_output_text(trimmed, posted=True)
         return f"posted seq={response.seq}: {trimmed[:120]}"
+
+    def _remember_messages(self, messages: list[HubMessage]) -> None:
+        by_seq = {message.seq: message for message in self.message_history}
+        by_seq.update({message.seq: message for message in messages})
+        history_limit = max(self.config.hub_context_messages * 4, 100)
+        self.message_history = sorted(by_seq.values(), key=lambda message: message.seq)[
+            -history_limit:
+        ]
+
+    def _recent_messages(self) -> list[HubMessage]:
+        return self.message_history[-self.config.hub_context_messages :]
+
+    def _is_reply_to_pending_question(self, message: HubMessage) -> bool:
+        previous_messages = [
+            history_message
+            for history_message in self.message_history
+            if history_message.seq < message.seq
+        ]
+        if not previous_messages:
+            return False
+
+        previous_message = previous_messages[-1]
+        return (
+            previous_message.agent_name == self.config.hub_agent_name
+            and "?" in previous_message.content
+        )
 
 
 def build_hub_loop(
