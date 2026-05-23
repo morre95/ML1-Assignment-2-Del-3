@@ -45,11 +45,14 @@ class FakeAssessor:
 
 
 class FakeAgentSystem:
-    def __init__(self) -> None:
+    def __init__(self, failures: list[Exception] | None = None) -> None:
         self.calls = []
+        self.failures = failures or []
 
     def invoke(self, message: str, thread_id: str) -> str:
         self.calls.append((message, thread_id))
+        if self.failures:
+            raise self.failures.pop(0)
         return f"{thread_id}: response to {message[:20]}"
 
 
@@ -243,6 +246,64 @@ def test_hub_loop_keeps_clarification_context_across_polls(tmp_path: Path) -> No
     )
     assert "Which language should I use?" in agent_system.calls[0][0]
     assert "Python 3.12 please" in agent_system.calls[0][0]
+
+
+def test_hub_loop_posts_blocked_command_without_invoking_agent(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient([HubMessage(seq=1, agent_name="human", content="me run rm -rf .")])
+    assessor = FakeAssessor(
+        AssessmentDecision(
+            action=AssessmentAction.RESPOND,
+            reason="explicit command request",
+        )
+    )
+    agent_system = FakeAgentSystem()
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=agent_system,
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "posted seq=99" in result
+    assert "blocked by the command safety policy" in client.posts[0][1]
+    assert "matched denied pattern" in client.posts[0][1]
+    assert assessor.calls == []
+    assert agent_system.calls == []
+
+
+def test_hub_loop_recovers_from_invalid_tool_history(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient([HubMessage(seq=1, agent_name="human", content="@me summarize")])
+    assessor = FakeAssessor(
+        AssessmentDecision(
+            action=AssessmentAction.RESPOND,
+            reason="direct request",
+        )
+    )
+    agent_system = FakeAgentSystem(
+        failures=[
+            ValueError(
+                "Found AIMessages with tool_calls that do not have a corresponding ToolMessage."
+            )
+        ]
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=agent_system,
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "posted seq=99" in result
+    assert agent_system.calls[0][1] == "hub-me"
+    assert agent_system.calls[1][1] == "hub-me-recovered-1"
 
 
 def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:

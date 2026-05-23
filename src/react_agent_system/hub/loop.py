@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from react_agent_system.agents import AgentSystem, build_agent_system
-from react_agent_system.bash_safety import ApprovalCallback
+from react_agent_system.bash_safety import ApprovalCallback, assess_command
 from react_agent_system.config import AgentSystemConfig
 from react_agent_system.hub.assessment import HubAssessor, format_hub_context
 from react_agent_system.hub.budget import BudgetController
@@ -38,6 +38,7 @@ class HubLoop:
     console: ConsoleController | None = None
     last_seen: int = 0
     message_history: list[HubMessage] = field(default_factory=list)
+    agent_thread_id: str | None = None
 
     def run_forever(self, max_iterations: int | None = None) -> None:
         iterations = 0
@@ -85,6 +86,10 @@ class HubLoop:
         if not trigger_messages:
             return f"gate: no message explicitly addressed to {self.config.hub_agent_name}"
 
+        blocked_command_response = self._blocked_command_response(trigger_messages[-1])
+        if blocked_command_response is not None:
+            return self._post(blocked_command_response)
+
         context_messages = self._recent_messages()
         context = format_hub_context(context_messages, self.config.hub_context_messages)
         self.budget.record_input_text(context)
@@ -131,7 +136,13 @@ class HubLoop:
             f"Group chat context:\n{context}"
         )
         self.budget.record_input_text(task)
-        reply = self.agent_system.invoke(task, thread_id=f"hub-{self.config.hub_agent_name}")
+        try:
+            reply = self.agent_system.invoke(task, thread_id=self._agent_thread_id())
+        except ValueError as exc:
+            if not _is_invalid_tool_history_error(exc):
+                raise
+            self.agent_thread_id = f"hub-{self.config.hub_agent_name}-recovered-{self.last_seen}"
+            reply = self.agent_system.invoke(task, thread_id=self.agent_thread_id)
         return self._post(reply)
 
     def _post(self, content: str) -> str:
@@ -181,6 +192,23 @@ class HubLoop:
             previous_message.agent_name == self.config.hub_agent_name
             and "?" in previous_message.content
         )
+
+    def _blocked_command_response(self, message: HubMessage) -> str | None:
+        if not _looks_like_shell_run_request(message.content):
+            return None
+
+        decision = assess_command(message.content, self.config.workspace)
+        if decision.allowed:
+            return None
+        return (
+            "I can't run that command because it is blocked by the command safety policy. "
+            f"Reason: {decision.reason}"
+        )
+
+    def _agent_thread_id(self) -> str:
+        if self.agent_thread_id is None:
+            self.agent_thread_id = f"hub-{self.config.hub_agent_name}"
+        return self.agent_thread_id
 
 
 def build_hub_loop(
@@ -260,3 +288,13 @@ def _normalize_address_text(value: str) -> str:
 
 def _is_distinct_agent_name(normalized_agent_name: str) -> bool:
     return "-" in normalized_agent_name or len(normalized_agent_name) >= 8
+
+
+def _looks_like_shell_run_request(content: str) -> bool:
+    normalized = _normalize_address_text(content)
+    return bool(re.search(r"\b(run|execute|bash|shell|command)\b", normalized))
+
+
+def _is_invalid_tool_history_error(exc: ValueError) -> bool:
+    message = str(exc)
+    return "tool_calls" in message and "ToolMessage" in message
