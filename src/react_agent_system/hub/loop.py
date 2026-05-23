@@ -80,7 +80,11 @@ class HubLoop:
         trigger_messages = [
             message
             for message in new_messages
-            if is_addressed_to_agent(message.content, self.config.hub_agent_name)
+            if is_addressed_to_agent(
+                message.content,
+                self.config.hub_agent_name,
+                self.config.hub_agent_aliases,
+            )
             or self._is_reply_to_pending_question(message)
         ]
         if not trigger_messages:
@@ -204,7 +208,6 @@ class HubLoop:
             "I can't run that command because it is blocked by the command safety policy. "
             f"Reason: {decision.reason}"
         )
-    
 
     def _agent_thread_id(self) -> str:
         if self.agent_thread_id is None:
@@ -250,10 +253,21 @@ def build_hub_loop(
     )
 
 
-def is_addressed_to_agent(content: str, agent_name: str) -> bool:
+def is_addressed_to_agent(
+    content: str,
+    agent_name: str,
+    aliases: list[str] | None = None,
+) -> bool:
     """Return true only when a message explicitly names this agent."""
 
-    normalized_agent_name = _normalize_address_text(agent_name.strip())
+    names = [agent_name, *(aliases or [])]
+    return any(_is_addressed_to_name(content, name) for name in names)
+
+
+def _is_addressed_to_name(content: str, name: str) -> bool:
+    """Return true only when a message explicitly names one configured name."""
+
+    normalized_agent_name = _normalize_address_text(name.strip())
     if not normalized_agent_name:
         return False
 

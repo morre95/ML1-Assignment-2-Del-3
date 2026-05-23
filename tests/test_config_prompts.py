@@ -56,6 +56,34 @@ def test_load_config_environment_overrides_dotenv(tmp_path: Path, monkeypatch) -
     assert config.hub_password == "dev-hub-password"
 
 
+def test_load_config_reads_hub_aliases_from_dotenv(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text(
+        "REACT_AGENT_HUB_ALIASES=ema, erik,builder\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    config = load_config(workspace=tmp_path)
+
+    assert config.hub_agent_aliases == ["ema", "erik", "builder"]
+
+
+def test_load_config_reads_hub_aliases_from_yaml(tmp_path: Path, monkeypatch) -> None:
+    config_file = tmp_path / "agents.yaml"
+    config_file.write_text(
+        "hub_agent_aliases:\n"
+        "  - ema\n"
+        "  - erik\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("REACT_AGENT_HUB_ALIASES", raising=False)
+
+    config = load_config(config_path=config_file, workspace=tmp_path)
+
+    assert config.hub_agent_aliases == ["ema", "erik"]
+
+
 def test_prompt_library_renders_configured_template(tmp_path: Path, monkeypatch) -> None:
     prompt_dir = tmp_path / "prompts"
     agent_dir = prompt_dir / "agents"

@@ -173,7 +173,7 @@ def test_hub_loop_accepts_direct_name_call_without_mention(tmp_path: Path) -> No
 
 def test_hub_loop_responds_to_addressed_message_after_startup(tmp_path: Path) -> None:
     config = make_config(tmp_path)
-    config = replace(config, hub_agent_name="ErikMoren-agent")
+    config = replace(config, hub_agent_name="ErikMoren-agent", hub_agent_aliases=["ema"])
     client = FakeClient([HubMessage(seq=1, agent_name="other", content="background")])
     assessor = FakeAssessor(
         AssessmentDecision(
@@ -195,7 +195,7 @@ def test_hub_loop_responds_to_addressed_message_after_startup(tmp_path: Path) ->
         HubMessage(
             seq=2,
             agent_name="human",
-            content="kan ErikMoren-agent kolla reviewen?",
+            content="@ema kan du kolla reviewen?",
         )
     )
     second_result = loop.run_once()
@@ -335,6 +335,8 @@ def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:
         "Does anyone know whether ErikMoren-agent can review this?",
         "ErikMoren-agent",
     )
+    assert is_addressed_to_agent("@ema please check this", "ErikMoren-agent", ["ema"])
+    assert is_addressed_to_agent("builder run pwd", "ErikMoren-agent", ["ema", "builder"])
 
 
 def test_is_addressed_to_agent_rejects_general_relevance() -> None:

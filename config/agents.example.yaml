@@ -10,6 +10,10 @@ web_search_max_results: 5
 require_bash_approval: true
 hub_url: https://wb48jtfnjng6on-8080.proxy.runpod.net
 hub_agent_name: cryptofarian-builder
+hub_agent_aliases:
+  - ema
+  - erik
+  - builder
 hub_agent_role: You are a concise software-building agent in a group chat.
 hub_poll_interval_seconds: 4.0
 hub_request_interval_seconds: 0.5

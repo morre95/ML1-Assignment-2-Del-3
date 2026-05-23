@@ -45,6 +45,7 @@ class AgentSystemConfig:
     hub_url: str = "https://wb48jtfnjng6on-8080.proxy.runpod.net"
     hub_password: str | None = None
     hub_agent_name: str = "cryptofarian-builder"
+    hub_agent_aliases: list[str] = field(default_factory=list)
     hub_agent_role: str = "You are a concise software-building agent in a group chat."
     hub_poll_interval_seconds: float = 4.0
     hub_request_interval_seconds: float = 1.0
@@ -112,6 +113,10 @@ def load_config(
             "REACT_AGENT_HUB_AGENT_NAME",
             dotenv,
             str(raw.get("hub_agent_name", "cryptofarian-builder")),
+        ),
+        hub_agent_aliases=_list_from_config(
+            _env_value("REACT_AGENT_HUB_ALIASES", dotenv)
+            or raw.get("hub_agent_aliases", [])
         ),
         hub_agent_role=_env_value(
             "REACT_AGENT_HUB_AGENT_ROLE",
@@ -184,3 +189,13 @@ def _bool_from_config(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _list_from_config(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    raise ValueError("Expected a comma-separated string or list.")
