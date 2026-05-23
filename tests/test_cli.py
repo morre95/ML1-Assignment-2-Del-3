@@ -68,3 +68,14 @@ def test_hub_mode_can_auto_approve_safe_commands_when_requested(monkeypatch) -> 
 
     assert exit_code == 0
     assert captured["approval_callback"]("pwd", SafetyDecision(True, "safe")) is True
+    assert (
+        captured["approval_callback"]("cd /workspace && pwd", SafetyDecision(True, "safe"))
+        is True
+    )
+    assert (
+        captured["approval_callback"](
+            "python -c 'import shutil; shutil.rmtree(\".\")'",
+            SafetyDecision(True, "not on deny list"),
+        )
+        is False
+    )

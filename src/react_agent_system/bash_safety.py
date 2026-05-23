@@ -46,6 +46,8 @@ DENIED_PATTERNS = [
     re.compile(r">\s*/(etc|bin|sbin|usr|boot|dev|proc|sys|run|var)/"),
 ]
 
+SHELL_META_PATTERN = re.compile(r"[;|&><`$()]")
+
 
 class BashCommandRunner:
     """Runs approved shell commands inside the workspace."""
@@ -120,6 +122,29 @@ def assess_command(command: str, workspace: Path) -> SafetyDecision:
     return SafetyDecision(True, "command is not on the deny list", approval_required=True)
 
 
+def is_hub_auto_approved_command(command: str) -> bool:
+    """Return true for the small set of commands hub mode may run unattended."""
+
+    normalized = _strip_workspace_cd(command.strip())
+    if not normalized or SHELL_META_PATTERN.search(normalized):
+        return False
+
+    try:
+        tokens = shlex.split(normalized)
+    except ValueError:
+        return False
+    if not tokens:
+        return False
+
+    return (
+        tokens == ["pwd"]
+        or _is_safe_ls_command(tokens)
+        or _is_safe_git_command(tokens)
+        or _is_safe_python_module_command(tokens)
+        or _is_safe_ruff_command(tokens)
+    )
+
+
 def _check_redirection_targets(tokens: list[str], workspace: Path) -> SafetyDecision | None:
     redirect_tokens = {">", ">>", "1>", "1>>", "2>", "2>>"}
     for index, token in enumerate(tokens[:-1]):
@@ -129,6 +154,78 @@ def _check_redirection_targets(tokens: list[str], workspace: Path) -> SafetyDeci
         if target.is_absolute() and not _is_relative_to(target.resolve(), workspace):
             return SafetyDecision(False, f"redirection target is outside workspace: {target}")
     return None
+
+
+def _strip_workspace_cd(command: str) -> str:
+    parts = [part.strip() for part in command.split("&&")]
+    if len(parts) != 2:
+        return command
+
+    try:
+        cd_tokens = shlex.split(parts[0])
+    except ValueError:
+        return command
+    if len(cd_tokens) == 2 and cd_tokens[0] == "cd" and cd_tokens[1] in {".", "./", "/workspace"}:
+        return parts[1]
+    return command
+
+
+def _is_safe_ls_command(tokens: list[str]) -> bool:
+    if tokens[0] != "ls":
+        return False
+    return all(_is_safe_flag(token) or _is_safe_relative_path(token) for token in tokens[1:])
+
+
+def _is_safe_git_command(tokens: list[str]) -> bool:
+    if tokens[:2] == ["git", "status"]:
+        return all(token in {"--short", "--porcelain", "--branch"} for token in tokens[2:])
+    if tokens[:2] == ["git", "diff"]:
+        return all(_is_safe_flag(token) for token in tokens[2:])
+    if tokens[:2] == ["git", "log"]:
+        return all(
+            token.startswith("--oneline")
+            or token.startswith("--max-count=")
+            or token in {"--decorate", "--graph"}
+            for token in tokens[2:]
+        )
+    return False
+
+
+def _is_safe_python_module_command(tokens: list[str]) -> bool:
+    if len(tokens) < 3 or tokens[:2] != ["python", "-m"]:
+        return False
+    module = tokens[2]
+    args = tokens[3:]
+    if module == "pytest":
+        return all(_is_safe_test_arg(token) for token in args)
+    if module == "compileall":
+        return all(token in {"src", "tests"} for token in args)
+    return False
+
+
+def _is_safe_ruff_command(tokens: list[str]) -> bool:
+    if tokens[:2] != ["ruff", "check"]:
+        return False
+    return all(_is_safe_flag(token) or _is_safe_relative_path(token) for token in tokens[2:])
+
+
+def _is_safe_test_arg(token: str) -> bool:
+    return _is_safe_flag(token) or _is_safe_relative_path(token)
+
+
+def _is_safe_flag(token: str) -> bool:
+    if not token.startswith("-"):
+        return False
+    stripped = token.removeprefix("--").removeprefix("-").replace("=", "")
+    return bool(stripped) and all(
+        character.isalnum() or character in {"-", "_"} for character in stripped
+    )
+
+
+def _is_safe_relative_path(token: str) -> bool:
+    if token.startswith("-") or token.startswith("/") or ".." in Path(token).parts:
+        return False
+    return not SHELL_META_PATTERN.search(token)
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

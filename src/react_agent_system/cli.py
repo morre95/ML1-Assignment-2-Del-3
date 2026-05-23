@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from react_agent_system.agents import build_agent_system
-from react_agent_system.bash_safety import SafetyDecision
+from react_agent_system.bash_safety import SafetyDecision, is_hub_auto_approved_command
 from react_agent_system.config import load_config
 from react_agent_system.hub.loop import build_hub_loop
 from react_agent_system.llm import OpenRouterConfigurationError
@@ -55,7 +55,7 @@ def run_hub(argv: Sequence[str]) -> int:
     if args.role:
         config = replace(config, hub_agent_role=args.role)
 
-    approval_callback = _auto_approve if args.yes_to_safe_commands else None
+    approval_callback = _auto_approve_hub_command if args.yes_to_safe_commands else None
     try:
         loop = build_hub_loop(config, approval_callback=approval_callback)
     except (OpenRouterConfigurationError, ValueError) as exc:
@@ -135,6 +135,14 @@ def _prompt_for_approval(command: str, decision: SafetyDecision) -> bool:
 def _auto_approve(command: str, decision: SafetyDecision) -> bool:
     print(f"Auto-approved safe command: {command} ({decision.reason})")
     return True
+
+
+def _auto_approve_hub_command(command: str, decision: SafetyDecision) -> bool:
+    if is_hub_auto_approved_command(command):
+        print(f"Auto-approved hub allow-listed command: {command} ({decision.reason})")
+        return True
+    print(f"Hub command not on allow-list: {command} ({decision.reason})")
+    return False
 
 
 if __name__ == "__main__":
