@@ -55,7 +55,7 @@ def run_hub(argv: Sequence[str]) -> int:
     if args.role:
         config = replace(config, hub_agent_role=args.role)
 
-    approval_callback = _auto_approve if args.yes_to_safe_commands else _prompt_for_approval
+    approval_callback = _auto_approve if args.yes_to_safe_commands else None
     try:
         loop = build_hub_loop(config, approval_callback=approval_callback)
     except (OpenRouterConfigurationError, ValueError) as exc:
