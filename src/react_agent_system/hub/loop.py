@@ -200,10 +200,8 @@ class HubLoop:
         decision = assess_command(message.content, self.config.workspace)
         if decision.allowed:
             return None
-        return (
-            "I can't run that command because it is blocked by the command safety policy. "
-            f"Reason: {decision.reason}"
-        )
+        return "I can't run that command because it is blocked by the command safety policy. "
+    
 
     def _agent_thread_id(self) -> str:
         if self.agent_thread_id is None:
