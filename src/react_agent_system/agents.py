@@ -13,8 +13,10 @@ from react_agent_system.llm import build_chat_model
 from react_agent_system.prompts import PromptLibrary
 from react_agent_system.session import build_sqlite_checkpointer, build_thread_config
 from react_agent_system.tools.factory import (
+    StatsCallback,
     build_agent_tool,
     build_github_tools,
+    build_hub_tools,
     build_repo_tools,
     build_research_tools,
 )
@@ -38,6 +40,7 @@ class AgentSystem:
 def build_agent_system(
     config: AgentSystemConfig,
     approval_callback: ApprovalCallback | None = None,
+    stats_callback: StatsCallback | None = None,
     model: Any | None = None,
     checkpointer: Any | None = None,
 ) -> AgentSystem:
@@ -52,6 +55,7 @@ def build_agent_system(
     )
     research_tools = build_research_tools(config.web_search_max_results)
     github_tools = build_github_tools()
+    hub_tools = build_hub_tools(stats_callback)
 
     summary_agent = create_react_agent(
         model=chat_model,
@@ -114,7 +118,7 @@ def build_agent_system(
         prompt=prompt_library.render("repo_tool"),
     )
 
-    supervisor_tools = repo_tools + research_tools + github_tools + [
+    supervisor_tools = repo_tools + research_tools + github_tools + hub_tools + [
         build_agent_tool(
             "ask_planner",
             "Ask the planner/architect agent to break down a user request.",

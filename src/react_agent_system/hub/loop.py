@@ -237,6 +237,7 @@ def build_hub_loop(
     agent_system = build_agent_system(
         config=config,
         approval_callback=approval_callback,
+        stats_callback=lambda: client.fetch_stats().model_dump_json(),
         model=chat_model,
     )
     console = ConsoleController(

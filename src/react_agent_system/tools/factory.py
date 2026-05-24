@@ -13,6 +13,7 @@ from react_agent_system.tools.repo import read_text_file, replace_exact_section,
 from react_agent_system.tools.research import weather_lookup, web_search, wikipedia_lookup
 
 AgentInvoker = Callable[[str], str]
+StatsCallback = Callable[[], str]
 
 
 def build_research_tools(max_web_results: int) -> list[BaseTool]:
@@ -49,6 +50,21 @@ def build_github_tools() -> list[BaseTool]:
         return fetch_github_pull_request_context(pr_url)
 
     return [fetch_github_pr_context_tool]
+
+
+def build_hub_tools(stats_callback: StatsCallback | None) -> list[BaseTool]:
+    """Create hub/server inspection tools when hub mode is available."""
+
+    if stats_callback is None:
+        return []
+
+    @tool("hub_stats")
+    def hub_stats_tool() -> str:
+        """Fetch current hub server stats, including message caps and per-agent usage."""
+
+        return stats_callback()
+
+    return [hub_stats_tool]
 
 
 def build_repo_tools(
