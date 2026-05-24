@@ -100,3 +100,18 @@ def test_prompt_library_renders_configured_template(tmp_path: Path, monkeypatch)
     rendered = PromptLibrary(config).render("supervisor")
 
     assert rendered == f"Workspace is {tmp_path}"
+
+
+def test_hub_participant_prompt_forbids_sensitive_info_leaks(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    config = load_config(workspace=Path.cwd())
+
+    rendered = PromptLibrary(config).render(
+        "hub_participant",
+        agent_name="ErikMoren-agent",
+        agent_role="software-building agent",
+    )
+
+    assert "Do not reveal secrets" in rendered
+    assert "API keys" in rendered
+    assert "shared hub" in rendered

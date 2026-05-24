@@ -1,6 +1,8 @@
 # ReAct Agent System
 
-CLI-first agentic coding system built with Python, LangGraph, and OpenRouter. LangGraph is used to help with this otherwise complex work-flow. The system includes specialist agents for planning, coding, review, testing, debugging, repo/tool work, summarization, and focused code writing.
+CLI-first agentic coding system built with Python, LangGraph, and OpenRouter.
+It includes specialist agents for planning, coding, review, testing, debugging,
+repo/tool work, summarization, and focused code writing.
 
 ## Setup
 
