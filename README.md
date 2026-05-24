@@ -226,3 +226,28 @@ or:
 ```bash
 python -m react_agent_system.cli "your task here"
 ```
+
+
+
+## Körlogg
+
+```bash
+del3 main via 🐍 v3.14.4 (.venv) ✗ react-agent "tell me a joke"
+Why do programmers prefer dark mode?
+
+Because light attracts bugs.
+```
+
+```bash
+del3 main via 🐍 v3.14.4 (.venv) ❯ python -m react_agent_system.cli "what joke did you just tell me"
+I told you this joke:
+
+“Why do programmers prefer dark mode? Because light attracts bugs.”
+```
+
+```bash
+del3 main  via 🐍 v3.14.4 (.venv) ✗ react-agent "Vad är det för väder i Stockholm"
+Just nu i Stockholm är det **klart väder** och cirka **17,1 °C** (känns som **15,2 °C**).
+**Vind:** ca **13 km/h**. **Nederbörd:** **0,0 mm**. **Luftfuktighet:** **63 %**.
+```
+
