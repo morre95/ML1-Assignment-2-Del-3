@@ -23,8 +23,8 @@ hub_context_messages: 80
 hub_max_input_tokens: 30000
 hub_max_output_tokens: 8000
 hub_max_cost:
-hub_input_token_cost_per_million: 0.0
-hub_output_token_cost_per_million: 0.0
+hub_input_token_cost_per_million: 0.75
+hub_output_token_cost_per_million: 4.50
 prompts:
   planner: agents/planner.j2
   coder: agents/coder.j2
