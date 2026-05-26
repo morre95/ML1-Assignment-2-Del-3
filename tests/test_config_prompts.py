@@ -110,8 +110,40 @@ def test_hub_participant_prompt_forbids_sensitive_info_leaks(monkeypatch) -> Non
         "hub_participant",
         agent_name="ErikMoren-agent",
         agent_role="software-building agent",
+        hub_max_message_chars=4096,
     )
 
     assert "Do not reveal secrets" in rendered
     assert "API keys" in rendered
     assert "shared hub" in rendered
+
+
+def test_hub_participant_prompt_requires_code_in_chat(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    config = load_config(workspace=Path.cwd())
+
+    rendered = PromptLibrary(config).render(
+        "hub_participant",
+        agent_name="builder",
+        agent_role="coder",
+        hub_max_message_chars=4096,
+    )
+
+    assert "fenced markdown code blocks" in rendered
+    assert "save or write to a file only" in rendered
+    assert "4096 characters" in rendered
+
+
+def test_supervisor_prompt_includes_hub_code_delivery_when_hub_mode(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    config = load_config(workspace=Path.cwd())
+
+    rendered = PromptLibrary(config).render(
+        "supervisor",
+        hub_mode=True,
+        hub_max_message_chars=2048,
+    )
+
+    assert "fenced markdown code blocks" in rendered
+    assert "save or write to a file only" in rendered
+    assert "2048 characters" in rendered

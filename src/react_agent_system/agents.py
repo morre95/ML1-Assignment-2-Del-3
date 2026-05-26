@@ -43,6 +43,8 @@ def build_agent_system(
     stats_callback: StatsCallback | None = None,
     model: Any | None = None,
     checkpointer: Any | None = None,
+    *,
+    hub_mode: bool = False,
 ) -> AgentSystem:
     """Build the full supervisor plus specialist-agent tool graph."""
 
@@ -153,11 +155,18 @@ def build_agent_system(
         code_writer_tool,
     ]
 
+    supervisor_prompt_context: dict[str, Any] = {}
+    if hub_mode:
+        supervisor_prompt_context = {
+            "hub_mode": True,
+            "hub_max_message_chars": config.hub_max_message_chars,
+        }
+
     app = create_react_agent(
         model=chat_model,
         tools=supervisor_tools,
         name="planner_architect_supervisor",
-        prompt=prompt_library.render("supervisor"),
+        prompt=prompt_library.render("supervisor", **supervisor_prompt_context),
         checkpointer=checkpointer or build_sqlite_checkpointer(config.session_db),
     )
     return AgentSystem(app=app, config=config)

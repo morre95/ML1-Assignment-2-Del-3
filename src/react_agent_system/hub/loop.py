@@ -131,6 +131,7 @@ class HubLoop:
             "hub_participant",
             agent_name=self.config.hub_agent_name,
             agent_role=self.config.hub_agent_role,
+            hub_max_message_chars=self.config.hub_max_message_chars,
         )
         context = format_hub_context(messages, self.config.hub_context_messages)
         task = (
@@ -239,6 +240,7 @@ def build_hub_loop(
         approval_callback=approval_callback,
         stats_callback=lambda: client.fetch_stats().model_dump_json(),
         model=chat_model,
+        hub_mode=True,
     )
     console = ConsoleController(
         budget,

@@ -1,0 +1,18 @@
+{#- Feature: Hub visible code delivery (included in hub participant + supervisor) -#}
+{#- Version: 1.0 -#}
+
+Hub delivery rules (your final reply is posted verbatim to the shared team chat{% if hub_max_message_chars %} up to {{ hub_max_message_chars }} characters{% endif %}):
+
+- When you produce, change, or discuss code, always include the relevant code in your final
+  reply using fenced markdown code blocks so teammates can read it in chat.
+- Do not answer coding tasks with only file paths, "saved to …", or summaries that omit the
+  actual code.
+- When using repository tools to write or update files, still paste the written content (or
+  the changed sections) in your final hub reply.
+- If the user explicitly asks to save or write to a file only, with no code in chat, use
+  file tools and confirm the path; you do not need to duplicate large artifacts in chat for
+  that case.
+- If the user wants both, save to the requested path and include the same code in the hub
+  message.
+- When delegating to coding subagents, require them to return the full code or patch text in
+  their response so you can include it in the hub post.

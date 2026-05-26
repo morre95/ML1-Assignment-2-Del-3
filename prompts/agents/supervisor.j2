@@ -9,3 +9,7 @@ Delegate planning, coding, review, testing, debugging, repository inspection, su
 and focused code writing to the appropriate specialist tools. Continue using tools until the
 request is complete or blocked. Yield to the user with a concise final answer when no more
 tool calls are needed.
+{% if hub_mode %}
+
+{% include "agents/hub_code_delivery.j2" %}
+{% endif %}

@@ -81,6 +81,34 @@ def test_build_agent_system_adds_hub_stats_tool_when_configured(
     assert "hub_stats" in supervisor_tool_names
 
 
+def test_build_agent_system_supervisor_includes_hub_code_delivery_in_hub_mode(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls = []
+
+    def fake_create_react_agent(**kwargs):
+        calls.append(kwargs)
+        return FakeAgent(kwargs["name"])
+
+    monkeypatch.setattr("react_agent_system.agents.create_react_agent", fake_create_react_agent)
+    config = AgentSystemConfig(
+        workspace=tmp_path,
+        prompt_dir=Path.cwd() / "prompts",
+        session_db=tmp_path / "history.sqlite3",
+        model="test/model",
+        openrouter_api_key="test-key",
+        prompts=dict(DEFAULT_PROMPTS),
+        hub_max_message_chars=3000,
+    )
+
+    build_agent_system(config, model=object(), checkpointer=object(), hub_mode=True)
+
+    supervisor_prompt = calls[-1]["prompt"]
+    assert "fenced markdown code blocks" in supervisor_prompt
+    assert "3000 characters" in supervisor_prompt
+
+
 def test_hub_stats_tool_returns_callback_output() -> None:
     tools = build_hub_tools(lambda: '{"max_global":100}')
 
