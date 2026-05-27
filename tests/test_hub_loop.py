@@ -343,7 +343,34 @@ def test_hub_loop_recovers_from_invalid_tool_history(tmp_path: Path) -> None:
 
     assert "posted seq=99" in result
     assert agent_system.calls[0][1] == "hub-me"
-    assert agent_system.calls[1][1] == "hub-me-recovered-1"
+    assert agent_system.calls[1][1].startswith("hub-me-recovered-")
+
+
+def test_hub_loop_survives_double_corrupt_history(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient([HubMessage(seq=1, agent_name="human", content="@me summarize")])
+    assessor = FakeAssessor(
+        AssessmentDecision(
+            action=AssessmentAction.RESPOND,
+            reason="direct request",
+        )
+    )
+    tool_history_error = ValueError(
+        "Found AIMessages with tool_calls that do not have a corresponding ToolMessage."
+    )
+    agent_system = FakeAgentSystem(failures=[tool_history_error, tool_history_error])
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=agent_system,
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "corrupt after recovery" in result
+    assert client.posts == []
 
 
 def test_post_sends_multiple_chunks_with_delay(tmp_path: Path, monkeypatch) -> None:

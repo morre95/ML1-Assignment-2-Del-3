@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import time
 import unicodedata
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -146,8 +147,15 @@ class HubLoop:
         except ValueError as exc:
             if not _is_invalid_tool_history_error(exc):
                 raise
-            self.agent_thread_id = f"hub-{self.config.hub_agent_name}-recovered-{self.last_seen}"
-            reply = self.agent_system.invoke(task, thread_id=self.agent_thread_id)
+            self.agent_thread_id = (
+                f"hub-{self.config.hub_agent_name}-recovered-{uuid.uuid4().hex[:8]}"
+            )
+            try:
+                reply = self.agent_system.invoke(task, thread_id=self.agent_thread_id)
+            except ValueError as retry_exc:
+                if not _is_invalid_tool_history_error(retry_exc):
+                    raise
+                return "skipped: agent session history is corrupt after recovery"
         return self._post(reply)
 
     def _post(self, content: str) -> str:
