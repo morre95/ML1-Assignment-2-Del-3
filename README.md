@@ -251,3 +251,14 @@ Just nu i Stockholm är det **klart väder** och cirka **17,1 °C** (känns som 
 **Vind:** ca **13 km/h**. **Nederbörd:** **0,0 mm**. **Luftfuktighet:** **63 %**.
 ```
 
+
+### Run tests:
+Locally
+```bash
+python -m pytest
+```
+or run tests in docker:
+```bash
+docker compose run --rm --entrypoint /bin/sh agent -lc 'python -m pip install --user pytest >/tmp/dev-install.log && python -m pytest'
+```
+

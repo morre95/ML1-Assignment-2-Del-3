@@ -50,7 +50,14 @@ class HubLoop:
             iterations += 1
             if max_iterations is not None and iterations >= max_iterations:
                 return
-            time.sleep(self.budget.status().poll_interval_seconds)
+            self._interruptible_sleep(self.budget.status().poll_interval_seconds)
+
+    def _interruptible_sleep(self, seconds: float) -> None:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if self.console is not None and self.console.should_quit:
+                return
+            time.sleep(min(0.25, end - time.monotonic()))
 
     def run_once(self) -> str:
         try:
@@ -110,10 +117,17 @@ class HubLoop:
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
+        if self._quit_requested():
+            return "quit requested, skipping assessment"
+
         print("  assessing relevance ...")
         decision = self.assessor.assess(context_messages, trigger)
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         print(f"  assessment: action={decision.action.value} reason={decision.reason}")
+
+        if self._quit_requested():
+            return "quit requested, skipping response"
+
         return self._handle_decision(decision, context_messages)
 
     def _handle_decision(self, decision: AssessmentDecision, messages: list[HubMessage]) -> str:
@@ -247,6 +261,9 @@ class HubLoop:
             "I can't run that command because it is blocked by the command safety policy. "
             f"Reason: {decision.reason}"
         )
+
+    def _quit_requested(self) -> bool:
+        return self.console is not None and self.console.should_quit
 
     def _agent_thread_id(self) -> str:
         if self.agent_thread_id is None:
