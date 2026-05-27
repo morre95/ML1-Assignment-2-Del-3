@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AssessmentAction(StrEnum):
@@ -48,6 +48,13 @@ class AssessmentDecision(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     response_hint: str = ""
     target_agent: str = ""
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value: float) -> float:
+        if isinstance(value, (int, float)) and value > 1.0:
+            return value / 100.0
+        return value
 
 
 class RuntimeStatus(BaseModel):
