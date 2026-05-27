@@ -58,7 +58,9 @@ def parse_assessment(content: str) -> AssessmentDecision:
     try:
         raw = json.loads(_strip_json_fence(content))
         return AssessmentDecision.model_validate(raw)
-    except (json.JSONDecodeError, ValidationError, TypeError, ValueError):
+    except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as exc:
+        preview = content[:300].replace("\n", " ")
+        print(f"  assessment parse failed ({type(exc).__name__}): {preview}")
         return AssessmentDecision(
             action=AssessmentAction.STAY_SILENT,
             reason="assessment output was not valid JSON",
