@@ -65,7 +65,13 @@ def run_hub(argv: Sequence[str]) -> int:
     loop.last_seen = args.since
     if args.console:
         loop.console.start_background_reader()
-    loop.run_forever(max_iterations=args.max_iterations)
+    try:
+        loop.run_forever(max_iterations=args.max_iterations)
+    except KeyboardInterrupt:
+        print("\ninterrupted, sending goodbye ...")
+    else:
+        print("loop ended, sending goodbye ...")
+    _post_goodbye(loop)
     return 0
 
 
@@ -143,6 +149,23 @@ def _auto_approve_hub_command(command: str, decision: SafetyDecision) -> bool:
         return True
     print(f"Hub command not on allow-list: {command} ({decision.reason})")
     return False
+
+
+def _post_goodbye(loop) -> None:
+    from react_agent_system.hub.client import HubClientError
+    from react_agent_system.hub.loop import HubLoop
+
+    if not isinstance(loop, HubLoop):
+        return
+
+    try:
+        response = loop.client.post_message(
+            loop.config.hub_agent_name,
+            f"{loop.config.hub_agent_name} signing off. Goodbye!",
+        )
+        print(f"goodbye posted (seq={response.seq})")
+    except HubClientError as exc:
+        print(f"failed to post goodbye: {exc}")
 
 
 if __name__ == "__main__":
