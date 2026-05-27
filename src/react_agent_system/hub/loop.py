@@ -78,6 +78,10 @@ class HubLoop:
         if not new_messages:
             return ""
 
+        for message in new_messages:
+            preview = message.content[:100].replace("\n", " ")
+            print(f"  inbox seq={message.seq} from={message.agent_name}: {preview}")
+
         trigger_messages = [
             message
             for message in new_messages
@@ -91,7 +95,11 @@ class HubLoop:
         if not trigger_messages:
             return f"gate: no message explicitly addressed to {self.config.hub_agent_name}"
 
-        blocked_command_response = self._blocked_command_response(trigger_messages[-1])
+        trigger = trigger_messages[-1]
+        trigger_preview = trigger.content[:120].replace("\n", " ")
+        print(f"  trigger seq={trigger.seq} from={trigger.agent_name}: {trigger_preview}")
+
+        blocked_command_response = self._blocked_command_response(trigger)
         if blocked_command_response is not None:
             return self._post(blocked_command_response)
 
@@ -102,8 +110,10 @@ class HubLoop:
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        decision = self.assessor.assess(context_messages, trigger_messages[-1])
+        print("  assessing relevance ...")
+        decision = self.assessor.assess(context_messages, trigger)
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
+        print(f"  assessment: action={decision.action.value} reason={decision.reason}")
         return self._handle_decision(decision, context_messages)
 
     def _handle_decision(self, decision: AssessmentDecision, messages: list[HubMessage]) -> str:
@@ -142,6 +152,7 @@ class HubLoop:
             f"Group chat context:\n{context}"
         )
         self.budget.record_input_text(task)
+        print(f"  invoking agent (thread={self._agent_thread_id()}) ...")
         try:
             reply = self.agent_system.invoke(task, thread_id=self._agent_thread_id())
         except ValueError as exc:
