@@ -155,22 +155,41 @@ class HubLoop:
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        trimmed = content.strip()[: self.config.hub_max_message_chars]
-        if not trimmed:
+        chunks = _split_into_chunks(content.strip(), self.config.hub_max_message_chars)
+        if not chunks:
             return "skipped empty outbound message"
 
-        try:
-            response = self.client.post_message(self.config.hub_agent_name, trimmed)
-        except HubRateLimitError as exc:
-            return f"hub rate limit while posting: {exc}"
-        except HubClientError as exc:
-            return f"hub post failed: {exc}"
+        posted_seqs: list[int] = []
+        for index, chunk in enumerate(chunks):
+            if index > 0:
+                time.sleep(1.0)
+                budget = self.budget.check()
+                if not budget.can_spend:
+                    posted_seq_text = ",".join(str(seq) for seq in posted_seqs)
+                    return (
+                        f"posted {len(posted_seqs)}/{len(chunks)} chunks "
+                        f"(seq={posted_seq_text}), budget gate: {budget.reason}"
+                    )
 
-        self._remember_messages(
-            [HubMessage(seq=response.seq, agent_name=self.config.hub_agent_name, content=trimmed)]
-        )
-        self.budget.record_output_text(trimmed, posted=True)
-        return f"posted seq={response.seq}: {trimmed[:120]}"
+            try:
+                response = self.client.post_message(self.config.hub_agent_name, chunk)
+            except HubRateLimitError as exc:
+                chunk_number = index + 1
+                return f"hub rate limit while posting chunk {chunk_number}/{len(chunks)}: {exc}"
+            except HubClientError as exc:
+                chunk_number = index + 1
+                return f"hub post failed on chunk {chunk_number}/{len(chunks)}: {exc}"
+
+            self._remember_messages(
+                [HubMessage(seq=response.seq, agent_name=self.config.hub_agent_name, content=chunk)]
+            )
+            self.budget.record_output_text(chunk, posted=True)
+            posted_seqs.append(response.seq)
+
+        if len(posted_seqs) == 1:
+            return f"posted seq={posted_seqs[0]}: {chunks[0][:120]}"
+        posted_seq_text = ",".join(str(seq) for seq in posted_seqs)
+        return f"posted {len(posted_seqs)} chunks (seq={posted_seq_text})"
 
     def _remember_messages(self, messages: list[HubMessage]) -> None:
         by_seq = {message.seq: message for message in self.message_history}
@@ -265,6 +284,60 @@ def is_addressed_to_agent(
 
     names = [agent_name, *(aliases or [])]
     return any(_is_addressed_to_name(content, name) for name in names)
+
+
+def _split_into_chunks(content: str, max_chars: int) -> list[str]:
+    """Split hub output into messages that each fit the configured limit."""
+
+    if max_chars <= 0:
+        return []
+
+    stripped = content.strip()
+    if not stripped:
+        return []
+    if len(stripped) <= max_chars:
+        return [stripped]
+
+    total_parts = 2
+    while True:
+        header_len = len(f"[{total_parts}/{total_parts}]\n")
+        body_limit = max_chars - header_len
+        if body_limit <= 0:
+            return _split_body_into_chunks(stripped, max_chars)
+
+        body_chunks = _split_body_into_chunks(stripped, body_limit)
+        if len(body_chunks) == total_parts:
+            break
+        total_parts = len(body_chunks)
+
+    return [
+        f"[{index}/{total_parts}]\n{chunk}"
+        for index, chunk in enumerate(body_chunks, start=1)
+    ]
+
+
+def _split_body_into_chunks(content: str, max_chars: int) -> list[str]:
+    chunks: list[str] = []
+    remaining = content.strip()
+
+    while remaining:
+        if len(remaining) <= max_chars:
+            chunks.append(remaining)
+            break
+
+        split_at = _best_split_index(remaining, max_chars)
+        chunks.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+
+    return [chunk for chunk in chunks if chunk]
+
+
+def _best_split_index(content: str, max_chars: int) -> int:
+    for separator in ("\n\n", "\n", " "):
+        index = content.rfind(separator, 0, max_chars + 1)
+        if index > 0:
+            return index + len(separator)
+    return max_chars
 
 
 def _is_addressed_to_name(content: str, name: str) -> bool:

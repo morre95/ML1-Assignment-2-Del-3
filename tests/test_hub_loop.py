@@ -3,7 +3,7 @@ from pathlib import Path
 
 from react_agent_system.config import DEFAULT_PROMPTS, AgentSystemConfig
 from react_agent_system.hub.budget import BudgetController
-from react_agent_system.hub.loop import HubLoop, is_addressed_to_agent
+from react_agent_system.hub.loop import HubLoop, _split_into_chunks, is_addressed_to_agent
 from react_agent_system.hub.models import (
     AssessmentAction,
     AssessmentDecision,
@@ -17,6 +17,7 @@ class FakeClient:
     def __init__(self, messages: list[HubMessage]) -> None:
         self.messages = messages
         self.posts = []
+        self.next_post_seq = 99
 
     def fetch_messages(self, since: int) -> HubMessagesResponse:
         return HubMessagesResponse(
@@ -25,7 +26,9 @@ class FakeClient:
 
     def post_message(self, agent_name: str, content: str) -> HubPostResponse:
         self.posts.append((agent_name, content))
-        return HubPostResponse(status="ok", seq=99)
+        response = HubPostResponse(status="ok", seq=self.next_post_seq)
+        self.next_post_seq += 1
+        return response
 
 
 class FakeAssessor:
@@ -67,6 +70,43 @@ def make_config(tmp_path: Path) -> AgentSystemConfig:
         hub_agent_name="me",
         hub_max_messages=10,
     )
+
+
+def test_split_into_chunks_short_message_unchanged() -> None:
+    assert _split_into_chunks("  short message  ", 20) == ["short message"]
+
+
+def test_split_into_chunks_splits_at_paragraph_boundary() -> None:
+    chunks = _split_into_chunks("alpha beta\n\nsecond paragraph\n\nthird paragraph", 30)
+
+    assert chunks == [
+        "[1/3]\nalpha beta",
+        "[2/3]\nsecond paragraph",
+        "[3/3]\nthird paragraph",
+    ]
+    assert all(len(chunk) <= 30 for chunk in chunks)
+
+
+def test_split_into_chunks_splits_at_word_boundary() -> None:
+    chunks = _split_into_chunks("alpha beta gamma delta", 18)
+
+    assert chunks == ["[1/2]\nalpha beta", "[2/2]\ngamma delta"]
+    assert all(len(chunk) <= 18 for chunk in chunks)
+
+
+def test_split_into_chunks_hard_cuts_when_no_boundary() -> None:
+    chunks = _split_into_chunks("abcdefghij", 8)
+
+    assert chunks == ["[1/5]\nab", "[2/5]\ncd", "[3/5]\nef", "[4/5]\ngh", "[5/5]\nij"]
+    assert all(len(chunk) <= 8 for chunk in chunks)
+
+
+def test_split_into_chunks_adds_part_headers() -> None:
+    chunks = _split_into_chunks("one two three four five six", 15)
+
+    assert chunks[0].startswith("[1/")
+    assert chunks[-1].startswith(f"[{len(chunks)}/{len(chunks)}]\n")
+    assert all(len(chunk) <= 15 for chunk in chunks)
 
 
 def test_hub_loop_gates_unaddressed_message_without_assessment(tmp_path: Path) -> None:
@@ -238,7 +278,7 @@ def test_hub_loop_keeps_clarification_context_across_polls(tmp_path: Path) -> No
     second_result = loop.run_once()
 
     assert "posted seq=99: Which language should I use?" in first_result
-    assert "posted seq=99" in second_result
+    assert "posted seq=100" in second_result
     assert assessor.calls[1][1].content == "Python 3.12 please"
     assert any(
         message.agent_name == "me" and message.content == "Which language should I use?"
@@ -304,6 +344,54 @@ def test_hub_loop_recovers_from_invalid_tool_history(tmp_path: Path) -> None:
     assert "posted seq=99" in result
     assert agent_system.calls[0][1] == "hub-me"
     assert agent_system.calls[1][1] == "hub-me-recovered-1"
+
+
+def test_post_sends_multiple_chunks_with_delay(tmp_path: Path, monkeypatch) -> None:
+    sleep_calls = []
+    monkeypatch.setattr(
+        "react_agent_system.hub.loop.time.sleep",
+        lambda seconds: sleep_calls.append(seconds),
+    )
+    config = replace(make_config(tmp_path), hub_max_message_chars=18)
+    client = FakeClient([])
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=FakeAssessor(
+            AssessmentDecision(action=AssessmentAction.STAY_SILENT, reason="test")
+        ),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    result = loop._post("alpha beta gamma delta")
+
+    assert result == "posted 2 chunks (seq=99,100)"
+    assert client.posts == [
+        ("me", "[1/2]\nalpha beta"),
+        ("me", "[2/2]\ngamma delta"),
+    ]
+    assert sleep_calls == [1.0]
+
+
+def test_post_stops_on_budget_exhaustion_mid_chunk(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("react_agent_system.hub.loop.time.sleep", lambda seconds: None)
+    config = replace(make_config(tmp_path), hub_max_message_chars=18, hub_max_messages=1)
+    client = FakeClient([])
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=FakeAssessor(
+            AssessmentDecision(action=AssessmentAction.STAY_SILENT, reason="test")
+        ),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    result = loop._post("alpha beta gamma delta epsilon")
+
+    assert result == "posted 1/3 chunks (seq=99), budget gate: message cap reached"
+    assert client.posts == [("me", "[1/3]\nalpha beta")]
 
 
 def test_is_addressed_to_agent_accepts_mentions_and_direct_names() -> None:
