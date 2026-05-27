@@ -155,12 +155,10 @@ def build_agent_system(
         code_writer_tool,
     ]
 
-    supervisor_prompt_context: dict[str, Any] = {}
-    if hub_mode:
-        supervisor_prompt_context = {
-            "hub_mode": True,
-            "hub_max_message_chars": config.hub_max_message_chars,
-        }
+    supervisor_prompt_context: dict[str, Any] = {
+        "hub_mode": hub_mode,
+        "hub_max_message_chars": config.hub_max_message_chars,
+    }
 
     app = create_react_agent(
         model=chat_model,

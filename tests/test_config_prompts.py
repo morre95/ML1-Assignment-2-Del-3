@@ -62,6 +62,7 @@ def test_load_config_reads_hub_aliases_from_dotenv(tmp_path: Path, monkeypatch) 
         encoding="utf-8",
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("REACT_AGENT_HUB_ALIASES", raising=False)
 
     config = load_config(workspace=tmp_path)
 
