@@ -9,7 +9,12 @@ from langchain_core.tools import BaseTool, tool
 
 from react_agent_system.bash_safety import ApprovalCallback, BashCommandRunner
 from react_agent_system.tools.github import fetch_github_pull_request_context
-from react_agent_system.tools.repo import read_text_file, replace_exact_section, search_text
+from react_agent_system.tools.repo import (
+    RepositoryToolError,
+    read_text_file,
+    replace_exact_section,
+    search_text,
+)
 from react_agent_system.tools.research import weather_lookup, web_search, wikipedia_lookup
 
 AgentInvoker = Callable[[str], str]
@@ -84,19 +89,28 @@ def build_repo_tools(
     def read_file_tool(path: str) -> str:
         """Read a UTF-8 text file inside the workspace."""
 
-        return read_text_file(workspace, path)
+        try:
+            return read_text_file(workspace, path)
+        except RepositoryToolError as exc:
+            return f"Error: {exc}"
 
     @tool("search_repo")
     def search_repo_tool(query: str, glob: str = "**/*") -> str:
         """Search text files in the workspace for a case-insensitive string."""
 
-        return search_text(workspace, query, glob=glob)
+        try:
+            return search_text(workspace, query, glob=glob)
+        except RepositoryToolError as exc:
+            return f"Error: {exc}"
 
     @tool("edit_file_section")
     def edit_file_section_tool(path: str, old_text: str, new_text: str) -> str:
         """Replace exactly one section of a workspace file."""
 
-        return replace_exact_section(workspace, path, old_text, new_text)
+        try:
+            return replace_exact_section(workspace, path, old_text, new_text)
+        except RepositoryToolError as exc:
+            return f"Error: {exc}"
 
     @tool("bash_command")
     def bash_command_tool(command: str) -> str:

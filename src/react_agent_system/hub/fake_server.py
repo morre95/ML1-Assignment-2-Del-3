@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8089
 DEFAULT_PASSWORD = "dev-hub-password"
-DEFAULT_MAX_PER_AGENT = 10
+DEFAULT_MAX_PER_AGENT = 80
 DEFAULT_MAX_GLOBAL = 500
 MAX_MESSAGE_CHARS = 4096
 
