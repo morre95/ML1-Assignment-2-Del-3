@@ -20,8 +20,8 @@ hub_request_interval_seconds: 0.5
 hub_max_messages: 166
 hub_max_message_chars: 4096
 hub_context_messages: 80
-hub_max_input_tokens: 500000
-hub_max_output_tokens: 400000
+hub_max_input_tokens: 20000
+hub_max_output_tokens: 10000
 hub_max_cost:
 hub_input_token_cost_per_million: 0.25
 hub_output_token_cost_per_million: 2.75
