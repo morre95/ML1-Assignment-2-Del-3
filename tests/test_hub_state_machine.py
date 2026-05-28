@@ -270,6 +270,64 @@ def test_state_machine_respects_budget(tmp_path: Path) -> None:
     assert client.posts == []
 
 
+def test_state_machine_runs_on_existing_history_without_new_messages(tmp_path: Path) -> None:
+    """The state machine re-evaluates even when no new messages arrive."""
+
+    loop, client, state_assessor, agent_system = _build_loop(
+        tmp_path,
+        [HubMessage(seq=1, agent_name="other", content="here is the plan")],
+        PhaseDecision(
+            phase=HubPhase.CLAIM_TASK,
+            reason="free task available",
+            main_task="build API",
+            chosen_task="implement auth",
+        ),
+    )
+
+    loop.run_once()
+    assert len(state_assessor.calls) == 1
+
+    client.messages = []
+    result = loop.run_once()
+
+    assert len(state_assessor.calls) == 2
+    assert "posted" in result
+
+
+def test_state_machine_runs_when_only_self_messages_are_new(tmp_path: Path) -> None:
+    """State machine should still run when the only new message is from this agent."""
+
+    config = make_config(tmp_path)
+    client = FakeClient(
+        [HubMessage(seq=1, agent_name="other", content="plan posted")]
+    )
+    state_assessor = FakeStateAssessor(
+        PhaseDecision(
+            phase=HubPhase.CLAIM_TASK,
+            reason="free task",
+            chosen_task="write tests",
+        )
+    )
+    agent_system = FakeAgentSystem()
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=FakeAssessor(),
+        agent_system=agent_system,
+        budget=BudgetController(config),
+        state_assessor=state_assessor,
+    )
+
+    loop.run_once()
+    assert len(state_assessor.calls) == 1
+
+    client.messages = [HubMessage(seq=99, agent_name="me", content="I claim write tests")]
+    result = loop.run_once()
+
+    assert len(state_assessor.calls) == 2
+    assert "posted" in result
+
+
 def test_reactive_path_still_works_without_state_assessor(tmp_path: Path) -> None:
     """When state_assessor is None, the original reactive gate applies."""
 

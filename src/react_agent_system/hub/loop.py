@@ -79,27 +79,28 @@ class HubLoop:
         except HubClientError as exc:
             return f"hub request failed: {exc}"
 
-        if not response.messages:
-            return ""
-
-        messages = sorted(response.messages, key=lambda message: message.seq)
-        self._remember_messages(messages)
-        self.last_seen = max(message.seq for message in messages)
-        new_messages = [
-            message
-            for message in messages
-            if message.agent_name != self.config.hub_agent_name
-        ]
-        if not new_messages:
-            return ""
-
-        for message in new_messages:
-            preview = message.content[:100].replace("\n", " ")
-            print(f"  inbox seq={message.seq} from={message.agent_name}: {preview}")
+        if response.messages:
+            messages = sorted(response.messages, key=lambda message: message.seq)
+            self._remember_messages(messages)
+            self.last_seen = max(message.seq for message in messages)
+            new_messages = [
+                message
+                for message in messages
+                if message.agent_name != self.config.hub_agent_name
+            ]
+            for message in new_messages:
+                preview = message.content[:100].replace("\n", " ")
+                print(f"  inbox seq={message.seq} from={message.agent_name}: {preview}")
+        else:
+            new_messages = []
 
         if self.state_assessor is not None:
+            if not self.message_history and not new_messages:
+                return ""
             return self._run_state_machine()
 
+        if not new_messages:
+            return ""
         return self._run_reactive(new_messages)
 
     def _run_state_machine(self) -> str:
