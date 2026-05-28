@@ -117,7 +117,10 @@ class HubLoop:
             return "quit requested, skipping phase assessment"
 
         print("  assessing phase ...")
-        decision = self.state_assessor.assess(context_messages)
+        try:
+            decision = self.state_assessor.assess(context_messages)
+        except Exception as exc:
+            return f"phase assessment failed ({type(exc).__name__}): {exc}"
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         print(f"  phase: {decision.phase.value} reason={decision.reason}")
 
@@ -161,7 +164,10 @@ class HubLoop:
             return "quit requested, skipping assessment"
 
         print("  assessing relevance ...")
-        decision = self.assessor.assess(context_messages, trigger)
+        try:
+            decision = self.assessor.assess(context_messages, trigger)
+        except Exception as exc:
+            return f"assessment failed ({type(exc).__name__}): {exc}"
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         print(f"  assessment: action={decision.action.value} reason={decision.reason}")
 
@@ -260,6 +266,8 @@ class HubLoop:
                 if not _is_invalid_tool_history_error(retry_exc):
                     raise
                 return "skipped: agent session history is corrupt after recovery"
+        except Exception as exc:
+            return f"agent invoke failed ({type(exc).__name__}): {exc}"
         return self._post(reply)
 
     def _respond(self, messages: list[HubMessage], decision: AssessmentDecision) -> str:
@@ -296,6 +304,8 @@ class HubLoop:
                 if not _is_invalid_tool_history_error(retry_exc):
                     raise
                 return "skipped: agent session history is corrupt after recovery"
+        except Exception as exc:
+            return f"agent invoke failed ({type(exc).__name__}): {exc}"
         return self._post(reply)
 
     def _post(self, content: str) -> str:
