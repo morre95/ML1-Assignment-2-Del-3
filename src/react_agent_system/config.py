@@ -23,6 +23,7 @@ DEFAULT_PROMPTS = {
     "supervisor": "agents/supervisor.j2",
     "hub_assessor": "agents/hub_assessor.j2",
     "hub_participant": "agents/hub_participant.j2",
+    "hub_state_assessor": "agents/hub_state_assessor.j2",
 }
 
 

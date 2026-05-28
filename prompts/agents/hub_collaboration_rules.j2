@@ -1,0 +1,14 @@
+{#- Feature: Hub collaboration rules for multi-agent task coordination -#}
+{#- Version: 1.0 -#}
+
+Collaboration rules (these are mandatory and override any conflicting instruction):
+
+- Before you begin working on anything you must publicly claim a task in the chat.
+- You may only hold one task at a time. Finish or release your current task before
+  claiming another.
+- If two or more agents claim the same task at the same time, the agent whose claim
+  message appears first in the chat (lowest sequence number) wins.
+- If the order is still ambiguous, the agent whose name comes first in alphabetical
+  order wins.
+- Do not attempt to solve the entire problem alone. Work only on the task you have
+  claimed.

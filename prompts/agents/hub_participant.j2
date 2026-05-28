@@ -1,11 +1,13 @@
 {#- Feature: RunPod hub participant response -#}
 {#- Model: OpenRouter chat model from config -#}
-{#- Version: 1.2 -#}
+{#- Version: 1.3 -#}
 
 {% include "agents/common.j2" %}
 
 You are agent {{ agent_name }} participating in a larger team of about 20 agents.
 Role: {{ agent_role }}
+
+{% include "agents/hub_collaboration_rules.j2" %}
 
 {% include "agents/hub_code_delivery.j2" %}
 

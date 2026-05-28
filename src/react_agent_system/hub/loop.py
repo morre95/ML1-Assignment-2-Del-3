@@ -21,8 +21,15 @@ from react_agent_system.hub.client import (
     RunPodHubClient,
 )
 from react_agent_system.hub.console import ConsoleController
-from react_agent_system.hub.models import AssessmentAction, AssessmentDecision, HubMessage
+from react_agent_system.hub.models import (
+    AssessmentAction,
+    AssessmentDecision,
+    HubMessage,
+    HubPhase,
+    PhaseDecision,
+)
 from react_agent_system.hub.rate_limit import RateLimiter
+from react_agent_system.hub.state_machine import HubStateAssessor
 from react_agent_system.llm import build_chat_model
 from react_agent_system.prompts import PromptLibrary
 
@@ -37,6 +44,7 @@ class HubLoop:
     agent_system: AgentSystem
     budget: BudgetController
     console: ConsoleController | None = None
+    state_assessor: HubStateAssessor | None = None
     last_seen: int = 0
     message_history: list[HubMessage] = field(default_factory=list)
     agent_thread_id: str | None = None
@@ -88,6 +96,37 @@ class HubLoop:
         for message in new_messages:
             preview = message.content[:100].replace("\n", " ")
             print(f"  inbox seq={message.seq} from={message.agent_name}: {preview}")
+
+        if self.state_assessor is not None:
+            return self._run_state_machine()
+
+        return self._run_reactive(new_messages)
+
+    def _run_state_machine(self) -> str:
+        """Proactive state-machine path: read full chat, identify phase, act."""
+
+        context_messages = self._recent_messages()
+        context = format_hub_context(context_messages, self.config.hub_context_messages)
+        self.budget.record_input_text(context)
+        budget = self.budget.check()
+        if not budget.can_spend:
+            return f"budget gate: {budget.reason}"
+
+        if self._quit_requested():
+            return "quit requested, skipping phase assessment"
+
+        print("  assessing phase ...")
+        decision = self.state_assessor.assess(context_messages)
+        self.budget.record_output_text(decision.model_dump_json(), posted=False)
+        print(f"  phase: {decision.phase.value} reason={decision.reason}")
+
+        if self._quit_requested():
+            return "quit requested, skipping phase action"
+
+        return self._handle_phase(decision, context_messages)
+
+    def _run_reactive(self, new_messages: list[HubMessage]) -> str:
+        """Original reactive path: respond only when explicitly addressed."""
 
         trigger_messages = [
             message
@@ -146,6 +185,81 @@ class HubLoop:
                 return self._post(hint)
             case AssessmentAction.RESPOND:
                 return self._respond(messages, decision)
+
+    def _handle_phase(self, decision: PhaseDecision, messages: list[HubMessage]) -> str:
+        match decision.phase:
+            case HubPhase.STAY_SILENT:
+                return f"phase: stay_silent ({decision.reason})"
+            case HubPhase.PROPOSE_PLAN:
+                return self._phase_respond(
+                    messages,
+                    decision,
+                    "Propose a structured plan that breaks the main task into small, "
+                    "independent subtasks that agents can claim individually.",
+                )
+            case HubPhase.CLAIM_TASK:
+                return self._phase_respond(
+                    messages,
+                    decision,
+                    f"Claim and solve the following task: {decision.chosen_task}",
+                )
+            case HubPhase.REVIEW_TASK:
+                return self._phase_respond(
+                    messages,
+                    decision,
+                    "Review a completed task for correctness, gaps, or bugs.",
+                )
+            case HubPhase.PROPOSE_DONE:
+                return self._phase_respond(
+                    messages,
+                    decision,
+                    "All tasks are done. Propose the final integrated solution and "
+                    "mark it with DONE.",
+                )
+
+    def _phase_respond(
+        self,
+        messages: list[HubMessage],
+        decision: PhaseDecision,
+        instruction: str,
+    ) -> str:
+        budget = self.budget.check()
+        if not budget.can_spend:
+            return f"budget gate: {budget.reason}"
+
+        prompt = PromptLibrary(self.config).render(
+            "hub_participant",
+            agent_name=self.config.hub_agent_name,
+            agent_role=self.config.hub_agent_role,
+            hub_max_message_chars=self.config.hub_max_message_chars,
+        )
+        context = format_hub_context(messages, self.config.hub_context_messages)
+        task = (
+            f"{prompt}\n\n"
+            f"Phase: {decision.phase.value}\n"
+            f"Main task: {decision.main_task}\n"
+            f"Instruction: {instruction}\n"
+            f"Hint: {decision.response_hint}\n\n"
+            f"Group chat context:\n{context}"
+        )
+        self.budget.record_input_text(task)
+        print(f"  invoking agent for phase={decision.phase.value} "
+              f"(thread={self._agent_thread_id()}) ...")
+        try:
+            reply = self.agent_system.invoke(task, thread_id=self._agent_thread_id())
+        except ValueError as exc:
+            if not _is_invalid_tool_history_error(exc):
+                raise
+            self.agent_thread_id = (
+                f"hub-{self.config.hub_agent_name}-recovered-{uuid.uuid4().hex[:8]}"
+            )
+            try:
+                reply = self.agent_system.invoke(task, thread_id=self.agent_thread_id)
+            except ValueError as retry_exc:
+                if not _is_invalid_tool_history_error(retry_exc):
+                    raise
+                return "skipped: agent session history is corrupt after recovery"
+        return self._post(reply)
 
     def _respond(self, messages: list[HubMessage], decision: AssessmentDecision) -> str:
         budget = self.budget.check()
@@ -290,6 +404,7 @@ def build_hub_loop(
         rate_limiter=rate_limiter,
     )
     assessor = HubAssessor(config, chat_model)
+    state_assessor = HubStateAssessor(config, chat_model)
     agent_system = build_agent_system(
         config=config,
         approval_callback=approval_callback,
@@ -308,6 +423,7 @@ def build_hub_loop(
         agent_system=agent_system,
         budget=budget,
         console=console,
+        state_assessor=state_assessor,
     )
 
 

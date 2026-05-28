@@ -57,6 +57,26 @@ class AssessmentDecision(BaseModel):
         return value
 
 
+class HubPhase(StrEnum):
+    """Phases of the proactive hub state machine loop."""
+
+    PROPOSE_PLAN = "propose_plan"
+    CLAIM_TASK = "claim_task"
+    REVIEW_TASK = "review_task"
+    PROPOSE_DONE = "propose_done"
+    STAY_SILENT = "stay_silent"
+
+
+class PhaseDecision(BaseModel):
+    """Structured output from the state-machine assessor."""
+
+    phase: HubPhase
+    reason: str
+    main_task: str = ""
+    chosen_task: str = ""
+    response_hint: str = ""
+
+
 class RuntimeStatus(BaseModel):
     paused: bool
     messages_sent: int
