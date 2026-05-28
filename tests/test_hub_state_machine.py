@@ -270,8 +270,8 @@ def test_state_machine_respects_budget(tmp_path: Path) -> None:
     assert client.posts == []
 
 
-def test_state_machine_runs_on_existing_history_without_new_messages(tmp_path: Path) -> None:
-    """The state machine re-evaluates even when no new messages arrive."""
+def test_state_machine_skips_when_chat_unchanged(tmp_path: Path) -> None:
+    """No LLM call when no new messages have arrived since last assessment."""
 
     loop, client, state_assessor, agent_system = _build_loop(
         tmp_path,
@@ -290,42 +290,54 @@ def test_state_machine_runs_on_existing_history_without_new_messages(tmp_path: P
     client.messages = []
     result = loop.run_once()
 
-    assert len(state_assessor.calls) == 2
-    assert "posted" in result
+    assert result == ""
+    assert len(state_assessor.calls) == 1
 
 
-def test_state_machine_runs_when_only_self_messages_are_new(tmp_path: Path) -> None:
-    """State machine should still run when the only new message is from this agent."""
+def test_state_machine_reassesses_on_new_external_message(tmp_path: Path) -> None:
+    """A new message from another agent triggers a fresh assessment."""
 
-    config = make_config(tmp_path)
-    client = FakeClient(
-        [HubMessage(seq=1, agent_name="other", content="plan posted")]
-    )
-    state_assessor = FakeStateAssessor(
+    loop, client, state_assessor, agent_system = _build_loop(
+        tmp_path,
+        [HubMessage(seq=1, agent_name="other", content="plan posted")],
         PhaseDecision(
             phase=HubPhase.CLAIM_TASK,
             reason="free task",
             chosen_task="write tests",
-        )
-    )
-    agent_system = FakeAgentSystem()
-    loop = HubLoop(
-        config=config,
-        client=client,
-        assessor=FakeAssessor(),
-        agent_system=agent_system,
-        budget=BudgetController(config),
-        state_assessor=state_assessor,
+        ),
     )
 
     loop.run_once()
     assert len(state_assessor.calls) == 1
 
-    client.messages = [HubMessage(seq=99, agent_name="me", content="I claim write tests")]
+    client.messages = [HubMessage(seq=200, agent_name="other", content="new update")]
     result = loop.run_once()
 
     assert len(state_assessor.calls) == 2
     assert "posted" in result
+
+
+def test_state_machine_skips_after_own_post(tmp_path: Path) -> None:
+    """After posting, the agent does not re-assess on the next cycle."""
+
+    loop, client, state_assessor, agent_system = _build_loop(
+        tmp_path,
+        [HubMessage(seq=1, agent_name="other", content="plan posted")],
+        PhaseDecision(
+            phase=HubPhase.CLAIM_TASK,
+            reason="free task",
+            chosen_task="write tests",
+        ),
+    )
+
+    loop.run_once()
+    assert len(state_assessor.calls) == 1
+
+    client.messages = []
+    result = loop.run_once()
+
+    assert result == ""
+    assert len(state_assessor.calls) == 1
 
 
 def test_reactive_path_still_works_without_state_assessor(tmp_path: Path) -> None:

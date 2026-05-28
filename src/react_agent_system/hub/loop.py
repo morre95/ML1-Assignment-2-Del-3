@@ -46,6 +46,7 @@ class HubLoop:
     console: ConsoleController | None = None
     state_assessor: HubStateAssessor | None = None
     last_seen: int = 0
+    _last_assessed_seq: int = 0
     message_history: list[HubMessage] = field(default_factory=list)
     agent_thread_id: str | None = None
 
@@ -106,6 +107,10 @@ class HubLoop:
     def _run_state_machine(self) -> str:
         """Proactive state-machine path: read full chat, identify phase, act."""
 
+        latest_seq = self.message_history[-1].seq if self.message_history else 0
+        if latest_seq == self._last_assessed_seq:
+            return ""
+
         context_messages = self._recent_messages()
         context = format_hub_context(context_messages, self.config.hub_context_messages)
         self.budget.record_input_text(context)
@@ -121,6 +126,7 @@ class HubLoop:
             decision = self.state_assessor.assess(context_messages)
         except Exception as exc:
             return f"phase assessment failed ({type(exc).__name__}): {exc}"
+        self._last_assessed_seq = latest_seq
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         print(f"  phase: {decision.phase.value} reason={decision.reason}")
 
@@ -341,6 +347,7 @@ class HubLoop:
             self._remember_messages(
                 [HubMessage(seq=response.seq, agent_name=self.config.hub_agent_name, content=chunk)]
             )
+            self._last_assessed_seq = response.seq
             self.budget.record_output_text(chunk, posted=True)
             posted_seqs.append(response.seq)
 
