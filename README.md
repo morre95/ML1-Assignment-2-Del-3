@@ -105,6 +105,40 @@ docker compose run --rm agent hub \
   --role "Python coding agent that helps with implementation and tests"
 ```
 
+### Team Roles, Calibration, and Memory
+
+Hub mode is tuned to behave as a collaborative team-player rather than a solo
+programmer. The behavior is described in the agent's **static system prompt**, so it
+survives history trimming and is never compressed away:
+
+- **Team-player vs manager.** By default the agent is a team-player: it claims exactly
+  one task and works on it. Run it as the team manager (proposes and integrates the
+  plan, declares `DONE`, does not implement subtasks) with `--manager` or
+  `hub_agent_is_manager: true`. A team-player may still propose a plan itself if none
+  exists after `hub_plan_fallback_rounds` assessment rounds, so the chat never deadlocks.
+- **Fast in dialogue, deep with tools.** The prompt instructs the agent to keep
+  coordination posts short and quick, but to take its time doing thorough work silently
+  with its tools before posting one concise result.
+- **Important-message retention.** When the recent-message window slides, the plan, task
+  claims, and `DONE` markers are pinned (up to `hub_pinned_messages`) so they stay in the
+  context the agent reasons over even if the full chat is not kept.
+- **Context caching.** The agent reuses one stable thread per session and keeps the
+  large system prompt as a stable prefix, so the OpenAI/OpenRouter automatic prompt cache
+  is reused across rounds. `hub_history_max_messages` bounds the thread so long sessions
+  do not overflow the context window.
+
+#### Live calibration via a runtime file
+
+Point `hub_runtime_config_path` at a small YAML file (see
+`config/hub-runtime.example.yaml`). It is re-read at the start of every poll round, so you
+can calibrate prompts and behavior without restarting:
+
+```yaml
+is_manager: false        # flip the role live
+extra_instruction: ""    # one-off nudge appended to the agent's task this round
+paused: false            # pause posting without quitting
+```
+
 ### Hub Response Rules
 
 Agents do not respond automatically. For each incoming message, the agent first

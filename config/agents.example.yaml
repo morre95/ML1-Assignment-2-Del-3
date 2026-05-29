@@ -25,6 +25,20 @@ hub_max_output_tokens: 10000
 hub_max_cost:
 hub_input_token_cost_per_million: 0.25
 hub_output_token_cost_per_million: 2.75
+# Run this agent as the team manager (plans/integrates) instead of a team-player.
+# Can also be toggled live via hub_runtime_config_path or the --manager CLI flag.
+hub_agent_is_manager: false
+# A team-player may propose a plan itself if none exists after this many assessment rounds.
+hub_plan_fallback_rounds: 3
+# Keep up to this many "important" messages (plan, task claims, DONE) pinned in context even
+# after they slide out of the recent window.
+hub_pinned_messages: 8
+# Trim the supervisor's accumulated thread history to the last N messages before each model call.
+# The static system prompt is applied separately and is never trimmed, so it always persists.
+hub_history_max_messages: 40
+# Optional per-round tuning file re-read at the start of every loop iteration. Supported keys:
+# is_manager (bool), extra_instruction (str), paused (bool). See hub-runtime.example.yaml.
+hub_runtime_config_path:
 prompts:
   planner: agents/planner.j2
   coder: agents/coder.j2
@@ -36,4 +50,4 @@ prompts:
   code_writer: agents/code_writer.j2
   supervisor: agents/supervisor.j2
   hub_assessor: agents/hub_assessor.j2
-  hub_participant: agents/hub_participant.j2
+  hub_state_assessor: agents/hub_state_assessor.j2

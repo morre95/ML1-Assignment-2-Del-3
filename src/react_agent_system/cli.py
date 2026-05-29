@@ -54,6 +54,8 @@ def run_hub(argv: Sequence[str]) -> int:
         config = replace(config, hub_agent_name=args.agent_name)
     if args.role:
         config = replace(config, hub_agent_role=args.role)
+    if args.manager:
+        config = replace(config, hub_agent_is_manager=True)
 
     approval_callback = _auto_approve_hub_command if args.yes_to_safe_commands else None
     try:
@@ -102,6 +104,11 @@ def build_hub_parser() -> argparse.ArgumentParser:
         help="Unique hub agent name, e.g. cryptofarian-builder.",
     )
     parser.add_argument("--role", help="Short role/personality for this hub participant.")
+    parser.add_argument(
+        "--manager",
+        action="store_true",
+        help="Run this agent as the team manager (plans and integrates) instead of a team-player.",
+    )
     parser.add_argument(
         "--config",
         help="Optional YAML config file.",

@@ -22,7 +22,6 @@ DEFAULT_PROMPTS = {
     "code_writer": "agents/code_writer.j2",
     "supervisor": "agents/supervisor.j2",
     "hub_assessor": "agents/hub_assessor.j2",
-    "hub_participant": "agents/hub_participant.j2",
     "hub_state_assessor": "agents/hub_state_assessor.j2",
 }
 
@@ -58,6 +57,11 @@ class AgentSystemConfig:
     hub_max_cost: float | None = None
     hub_input_token_cost_per_million: float = 0.0
     hub_output_token_cost_per_million: float = 0.0
+    hub_agent_is_manager: bool = False
+    hub_plan_fallback_rounds: int = 3
+    hub_pinned_messages: int = 8
+    hub_history_max_messages: int = 40
+    hub_runtime_config_path: Path | None = None
     prompts: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PROMPTS))
 
 
@@ -143,6 +147,11 @@ def load_config(
         hub_output_token_cost_per_million=float(
             raw.get("hub_output_token_cost_per_million", 0.0)
         ),
+        hub_agent_is_manager=_bool_from_config(raw.get("hub_agent_is_manager", False)),
+        hub_plan_fallback_rounds=int(raw.get("hub_plan_fallback_rounds", 3)),
+        hub_pinned_messages=int(raw.get("hub_pinned_messages", 8)),
+        hub_history_max_messages=int(raw.get("hub_history_max_messages", 40)),
+        hub_runtime_config_path=_optional_path(raw.get("hub_runtime_config_path"), root),
         prompts={**DEFAULT_PROMPTS, **dict(raw.get("prompts", {}))},
     )
 
@@ -182,6 +191,15 @@ def _optional_float(value: Any) -> float | None:
     if value in (None, ""):
         return None
     return float(value)
+
+
+def _optional_path(value: Any, root: Path) -> Path | None:
+    if value in (None, ""):
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
 
 
 def _bool_from_config(value: Any) -> bool:

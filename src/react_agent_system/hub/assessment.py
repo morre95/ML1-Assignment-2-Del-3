@@ -25,7 +25,7 @@ class HubAssessor:
         messages: list[HubMessage],
         trigger_message: HubMessage,
     ) -> AssessmentDecision:
-        context = format_hub_context(messages, self.config.hub_context_messages)
+        context = format_hub_context(messages, len(messages))
         prompt = self.prompt_library.render(
             "hub_assessor",
             agent_name=self.config.hub_agent_name,

@@ -1,0 +1,14 @@
+# Per-round hub runtime tuning.
+#
+# Point `hub_runtime_config_path` (in agents.yaml) at a copy of this file. The hub loop re-reads
+# it at the start of every poll iteration, so you can calibrate behavior live without restarting.
+# All keys are optional; missing keys keep the value from the main config.
+
+# Run this agent as the manager (plans/integrates) instead of a team-player.
+is_manager: false
+
+# Extra one-off instruction appended to the agent's per-round task (e.g. tone/focus nudges).
+extra_instruction: ""
+
+# Pause posting without quitting the loop (same effect as the console `pause` command).
+paused: false

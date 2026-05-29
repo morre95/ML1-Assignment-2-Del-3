@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from langchain_core.messages import trim_messages
 from langgraph.prebuilt import create_react_agent
 
 from react_agent_system.bash_safety import ApprovalCallback
@@ -158,6 +159,9 @@ def build_agent_system(
     supervisor_prompt_context: dict[str, Any] = {
         "hub_mode": hub_mode,
         "hub_max_message_chars": config.hub_max_message_chars,
+        "agent_name": config.hub_agent_name,
+        "agent_role": config.hub_agent_role,
+        "is_manager": config.hub_agent_is_manager,
     }
 
     app = create_react_agent(
@@ -166,8 +170,34 @@ def build_agent_system(
         name="planner_architect_supervisor",
         prompt=prompt_library.render("supervisor", **supervisor_prompt_context),
         checkpointer=checkpointer or build_sqlite_checkpointer(config.session_db),
+        pre_model_hook=(
+            _build_history_trim_hook(config.hub_history_max_messages) if hub_mode else None
+        ),
     )
     return AgentSystem(app=app, config=config)
+
+
+def _build_history_trim_hook(max_messages: int) -> Any:
+    """Trim accumulated thread history before each model call without mutating saved state.
+
+    The static system prompt is applied by ``create_react_agent`` after this hook and never
+    lives in the message list, so it always persists even as old turns are dropped. ``start_on``
+    keeps the window starting on a human turn so tool-call/tool-result pairs stay intact.
+    """
+
+    def hook(state: dict[str, Any]) -> dict[str, Any]:
+        trimmed = trim_messages(
+            state["messages"],
+            strategy="last",
+            token_counter=len,
+            max_tokens=max_messages,
+            start_on="human",
+            include_system=False,
+            allow_partial=False,
+        )
+        return {"llm_input_messages": trimmed}
+
+    return hook
 
 
 def _agent_invoker(agent: Any, recursion_limit: int) -> Any:

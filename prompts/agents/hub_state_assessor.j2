@@ -28,5 +28,20 @@ Then decide what {{ agent_name }} should do next. Follow this decision loop:
    - stay_silent: Nothing actionable right now (e.g. waiting for others, the agent
      already holds an unfinished task, or the conversation has not changed).
 
+Role-based selection ({{ agent_name }}):
+{% if is_manager | default(false) %}
+- You are the MANAGER. Prefer propose_plan (when no plan exists), review_task, and
+  propose_done. Do NOT choose claim_task — leave subtasks for team-players to claim.
+{% else %}
+- You are a TEAM-PLAYER. Prefer claim_task when free tasks exist; otherwise review_task.
+{% if allow_plan_fallback | default(false) %}
+- No plan has appeared and the chat is stalled, so you MAY choose propose_plan to unblock
+  the team.
+{% else %}
+- Do NOT choose propose_plan; wait for a plan to be posted. If none exists yet and no one is
+  proposing one, choose stay_silent rather than planning prematurely.
+{% endif %}
+{% endif %}
+
 Return only JSON with these keys: phase, reason, main_task, chosen_task, response_hint.
 Keep response_hint short. Leave chosen_task empty unless phase is claim_task.

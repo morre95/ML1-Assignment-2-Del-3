@@ -21,12 +21,20 @@ class HubStateAssessor:
         self.model = model
         self.prompt_library = PromptLibrary(config)
 
-    def assess(self, messages: list[HubMessage]) -> PhaseDecision:
-        context = format_hub_context(messages, self.config.hub_context_messages)
+    def assess(
+        self,
+        messages: list[HubMessage],
+        *,
+        is_manager: bool = False,
+        allow_plan_fallback: bool = False,
+    ) -> PhaseDecision:
+        context = format_hub_context(messages, len(messages))
         prompt = self.prompt_library.render(
             "hub_state_assessor",
             agent_name=self.config.hub_agent_name,
             agent_role=self.config.hub_agent_role,
+            is_manager=is_manager,
+            allow_plan_fallback=allow_plan_fallback,
         )
         response = self.model.invoke(
             [

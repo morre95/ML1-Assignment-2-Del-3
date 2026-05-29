@@ -39,9 +39,17 @@ class FakeStateAssessor:
     def __init__(self, decision: PhaseDecision) -> None:
         self.decision = decision
         self.calls: list[list[HubMessage]] = []
+        self.role_calls: list[tuple[bool, bool]] = []
 
-    def assess(self, messages: list[HubMessage]) -> PhaseDecision:
+    def assess(
+        self,
+        messages: list[HubMessage],
+        *,
+        is_manager: bool = False,
+        allow_plan_fallback: bool = False,
+    ) -> PhaseDecision:
         self.calls.append(messages)
+        self.role_calls.append((is_manager, allow_plan_fallback))
         return self.decision
 
 
@@ -364,20 +372,40 @@ def test_reactive_path_still_works_without_state_assessor(tmp_path: Path) -> Non
 # --- Prompt rendering ---
 
 
-def test_collaboration_rules_in_participant_prompt(tmp_path: Path) -> None:
+def test_collaboration_rules_in_supervisor_hub_prompt(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     library = PromptLibrary(config)
 
     rendered = library.render(
-        "hub_participant",
+        "supervisor",
+        hub_mode=True,
         agent_name="me",
         agent_role="builder",
+        is_manager=False,
         hub_max_message_chars=4096,
     )
 
     assert "claim a task" in rendered.lower()
     assert "one task at a time" in rendered.lower()
     assert "alphabetical" in rendered.lower()
+    assert "team-player" in rendered.lower()
+
+
+def test_supervisor_hub_prompt_describes_manager_role(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    library = PromptLibrary(config)
+
+    rendered = library.render(
+        "supervisor",
+        hub_mode=True,
+        agent_name="me",
+        agent_role="builder",
+        is_manager=True,
+        hub_max_message_chars=4096,
+    )
+
+    assert "manager" in rendered.lower()
+    assert "do not implement the subtasks yourself" in rendered.lower()
 
 
 def test_state_assessor_prompt_renders(tmp_path: Path) -> None:
@@ -392,4 +420,173 @@ def test_state_assessor_prompt_renders(tmp_path: Path) -> None:
 
     assert "propose_plan" in rendered
     assert "claim_task" in rendered
-    assert "claim a task" in rendered.lower()
+
+
+def test_state_assessor_prompt_team_player_blocks_planning(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    rendered = PromptLibrary(config).render(
+        "hub_state_assessor",
+        agent_name="me",
+        agent_role="builder",
+        is_manager=False,
+        allow_plan_fallback=False,
+    )
+
+    assert "do not choose propose_plan" in rendered.lower()
+
+
+def test_state_assessor_prompt_allows_plan_fallback(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    rendered = PromptLibrary(config).render(
+        "hub_state_assessor",
+        agent_name="me",
+        agent_role="builder",
+        is_manager=False,
+        allow_plan_fallback=True,
+    )
+
+    assert "may choose propose_plan" in rendered.lower()
+
+
+# --- Important-message pinning (insight #2) ---
+
+
+def test_context_keeps_pinned_plan_after_window_slides(tmp_path: Path) -> None:
+    config = replace(make_config(tmp_path), hub_context_messages=2, hub_pinned_messages=4)
+    loop = HubLoop(
+        config=config,
+        client=FakeClient([]),
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    loop._remember_messages(
+        [
+            HubMessage(seq=1, agent_name="lead", content="Here is the PLAN: build the API"),
+            HubMessage(seq=2, agent_name="a", content="sounds good"),
+            HubMessage(seq=3, agent_name="b", content="working on it"),
+            HubMessage(seq=4, agent_name="c", content="almost there"),
+        ]
+    )
+
+    context = loop._context_messages()
+    contents = [message.content for message in context]
+    # Recent window is only the last 2 messages, but the plan is pinned and survives.
+    assert any("PLAN" in content for content in contents)
+    assert context[-1].seq == 4
+    assert [message.seq for message in context] == sorted(message.seq for message in context)
+
+
+def test_pinned_messages_capped(tmp_path: Path) -> None:
+    config = replace(make_config(tmp_path), hub_pinned_messages=2)
+    loop = HubLoop(
+        config=config,
+        client=FakeClient([]),
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    loop._remember_messages(
+        [HubMessage(seq=i, agent_name="x", content=f"claim task {i}") for i in range(1, 6)]
+    )
+
+    assert len(loop.pinned_messages) == 2
+    # Keeps the most recent important messages.
+    assert [message.seq for message in loop.pinned_messages] == [4, 5]
+
+
+# --- Role + deadlock fallback (insight #4/#5) ---
+
+
+def _role_loop(tmp_path: Path, config: AgentSystemConfig, messages: list[HubMessage]):
+    state_assessor = FakeStateAssessor(
+        PhaseDecision(phase=HubPhase.STAY_SILENT, reason="test")
+    )
+    loop = HubLoop(
+        config=config,
+        client=FakeClient(messages),
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+        state_assessor=state_assessor,
+    )
+    return loop, state_assessor
+
+
+def test_manager_role_passed_to_state_assessor(tmp_path: Path) -> None:
+    config = replace(make_config(tmp_path), hub_agent_is_manager=True)
+    loop, state_assessor = _role_loop(
+        tmp_path, config, [HubMessage(seq=1, agent_name="o", content="hello")]
+    )
+
+    loop.run_once()
+
+    assert state_assessor.role_calls[-1] == (True, False)
+
+
+def test_team_player_plan_fallback_after_threshold(tmp_path: Path) -> None:
+    config = replace(make_config(tmp_path), hub_plan_fallback_rounds=2)
+    client = FakeClient([HubMessage(seq=1, agent_name="o", content="hi")])
+    state_assessor = FakeStateAssessor(
+        PhaseDecision(phase=HubPhase.STAY_SILENT, reason="test")
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+        state_assessor=state_assessor,
+    )
+
+    loop.run_once()
+    assert state_assessor.role_calls[-1] == (False, False)
+
+    client.messages = [HubMessage(seq=2, agent_name="o", content="still waiting")]
+    loop.run_once()
+    assert state_assessor.role_calls[-1] == (False, True)
+
+
+# --- Per-round runtime tuning (insight #5) ---
+
+
+def test_runtime_tuning_overrides_role_pause_and_instruction(tmp_path: Path) -> None:
+    runtime_file = tmp_path / "hub-runtime.yaml"
+    runtime_file.write_text(
+        "is_manager: true\nextra_instruction: be terse\npaused: true\n",
+        encoding="utf-8",
+    )
+    config = replace(make_config(tmp_path), hub_runtime_config_path=runtime_file)
+    loop = HubLoop(
+        config=config,
+        client=FakeClient([]),
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    loop._refresh_runtime_tuning()
+
+    assert loop._is_manager() is True
+    assert loop.budget.paused is True
+    assert "be terse" in loop._extra_instruction_line()
+
+
+def test_runtime_tuning_missing_file_is_ignored(tmp_path: Path) -> None:
+    config = replace(
+        make_config(tmp_path), hub_runtime_config_path=tmp_path / "absent.yaml"
+    )
+    loop = HubLoop(
+        config=config,
+        client=FakeClient([]),
+        assessor=FakeAssessor(),
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    loop._refresh_runtime_tuning()
+
+    assert loop._is_manager() is False
+    assert loop._extra_instruction_line() == ""

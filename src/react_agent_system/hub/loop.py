@@ -9,6 +9,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+import yaml
+
 from react_agent_system.agents import AgentSystem, build_agent_system
 from react_agent_system.bash_safety import ApprovalCallback, assess_command
 from react_agent_system.config import AgentSystemConfig
@@ -31,7 +33,6 @@ from react_agent_system.hub.models import (
 from react_agent_system.hub.rate_limit import RateLimiter
 from react_agent_system.hub.state_machine import HubStateAssessor
 from react_agent_system.llm import build_chat_model
-from react_agent_system.prompts import PromptLibrary
 
 
 @dataclass
@@ -48,7 +49,11 @@ class HubLoop:
     last_seen: int = 0
     _last_assessed_seq: int = 0
     message_history: list[HubMessage] = field(default_factory=list)
+    pinned_messages: list[HubMessage] = field(default_factory=list)
     agent_thread_id: str | None = None
+    assess_rounds: int = 0
+    _runtime_is_manager: bool | None = None
+    _runtime_extra_instruction: str = ""
 
     def run_forever(self, max_iterations: int | None = None) -> None:
         iterations = 0
@@ -69,6 +74,7 @@ class HubLoop:
             time.sleep(min(0.25, end - time.monotonic()))
 
     def run_once(self) -> str:
+        self._refresh_runtime_tuning()
         try:
             response = self.client.fetch_messages(self.last_seen)
         except HubAuthenticationError as exc:
@@ -111,8 +117,8 @@ class HubLoop:
         if latest_seq == self._last_assessed_seq:
             return ""
 
-        context_messages = self._recent_messages()
-        context = format_hub_context(context_messages, self.config.hub_context_messages)
+        context_messages = self._context_messages()
+        context = format_hub_context(context_messages, len(context_messages))
         self.budget.record_input_text(context)
         budget = self.budget.check()
         if not budget.can_spend:
@@ -121,9 +127,18 @@ class HubLoop:
         if self._quit_requested():
             return "quit requested, skipping phase assessment"
 
+        self.assess_rounds += 1
+        is_manager = self._is_manager()
+        allow_plan_fallback = (
+            not is_manager and self.assess_rounds >= self.config.hub_plan_fallback_rounds
+        )
         print("  assessing phase ...")
         try:
-            decision = self.state_assessor.assess(context_messages)
+            decision = self.state_assessor.assess(
+                context_messages,
+                is_manager=is_manager,
+                allow_plan_fallback=allow_plan_fallback,
+            )
         except Exception as exc:
             return f"phase assessment failed ({type(exc).__name__}): {exc}"
         self._last_assessed_seq = latest_seq
@@ -159,8 +174,8 @@ class HubLoop:
         if blocked_command_response is not None:
             return self._post(blocked_command_response)
 
-        context_messages = self._recent_messages()
-        context = format_hub_context(context_messages, self.config.hub_context_messages)
+        context_messages = self._context_messages()
+        context = format_hub_context(context_messages, len(context_messages))
         self.budget.record_input_text(context)
         budget = self.budget.check()
         if not budget.can_spend:
@@ -240,20 +255,14 @@ class HubLoop:
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        prompt = PromptLibrary(self.config).render(
-            "hub_participant",
-            agent_name=self.config.hub_agent_name,
-            agent_role=self.config.hub_agent_role,
-            hub_max_message_chars=self.config.hub_max_message_chars,
-        )
-        context = format_hub_context(messages, self.config.hub_context_messages)
+        context = format_hub_context(messages, len(messages))
         task = (
-            f"{prompt}\n\n"
             f"Phase: {decision.phase.value}\n"
             f"Main task: {decision.main_task}\n"
             f"Instruction: {instruction}\n"
-            f"Hint: {decision.response_hint}\n\n"
-            f"Group chat context:\n{context}"
+            f"Hint: {decision.response_hint}\n"
+            f"{self._extra_instruction_line()}"
+            f"\nGroup chat context:\n{context}"
         )
         self.budget.record_input_text(task)
         print(f"  invoking agent for phase={decision.phase.value} "
@@ -281,18 +290,12 @@ class HubLoop:
         if not budget.can_spend:
             return f"budget gate: {budget.reason}"
 
-        prompt = PromptLibrary(self.config).render(
-            "hub_participant",
-            agent_name=self.config.hub_agent_name,
-            agent_role=self.config.hub_agent_role,
-            hub_max_message_chars=self.config.hub_max_message_chars,
-        )
-        context = format_hub_context(messages, self.config.hub_context_messages)
+        context = format_hub_context(messages, len(messages))
         task = (
-            f"{prompt}\n\n"
             f"Internal assessment reason: {decision.reason}\n"
-            f"Suggested response focus: {decision.response_hint}\n\n"
-            f"Group chat context:\n{context}"
+            f"Suggested response focus: {decision.response_hint}\n"
+            f"{self._extra_instruction_line()}"
+            f"\nGroup chat context:\n{context}"
         )
         self.budget.record_input_text(task)
         print(f"  invoking agent (thread={self._agent_thread_id()}) ...")
@@ -363,9 +366,34 @@ class HubLoop:
         self.message_history = sorted(by_seq.values(), key=lambda message: message.seq)[
             -history_limit:
         ]
+        for message in messages:
+            if _is_important_message(message.content):
+                self._pin_message(message)
+
+    def _pin_message(self, message: HubMessage) -> None:
+        """Retain an important message (plan, task claim, DONE) beyond the recent window."""
+
+        if self.config.hub_pinned_messages <= 0:
+            return
+        if any(pinned.seq == message.seq for pinned in self.pinned_messages):
+            return
+        self.pinned_messages.append(message)
+        self.pinned_messages.sort(key=lambda pinned: pinned.seq)
+        if len(self.pinned_messages) > self.config.hub_pinned_messages:
+            self.pinned_messages = self.pinned_messages[-self.config.hub_pinned_messages :]
 
     def _recent_messages(self) -> list[HubMessage]:
         return self.message_history[-self.config.hub_context_messages :]
+
+    def _context_messages(self) -> list[HubMessage]:
+        """Recent window plus pinned important messages that have slid out of it."""
+
+        recent = self._recent_messages()
+        recent_seqs = {message.seq for message in recent}
+        merged = [
+            message for message in self.pinned_messages if message.seq not in recent_seqs
+        ] + recent
+        return sorted(merged, key=lambda message: message.seq)
 
     def _is_reply_to_pending_question(self, message: HubMessage) -> bool:
         previous_messages = [
@@ -401,6 +429,40 @@ class HubLoop:
         if self.agent_thread_id is None:
             self.agent_thread_id = f"hub-{self.config.hub_agent_name}"
         return self.agent_thread_id
+
+    def _is_manager(self) -> bool:
+        if self._runtime_is_manager is not None:
+            return self._runtime_is_manager
+        return self.config.hub_agent_is_manager
+
+    def _extra_instruction_line(self) -> str:
+        extra = self._runtime_extra_instruction.strip()
+        return f"Extra instruction: {extra}\n" if extra else ""
+
+    def _refresh_runtime_tuning(self) -> None:
+        """Re-read the optional per-round tuning file to calibrate behavior live."""
+
+        path = self.config.hub_runtime_config_path
+        if path is None:
+            return
+        try:
+            if not path.exists():
+                return
+            with path.open(encoding="utf-8") as file:
+                data = yaml.safe_load(file) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            print(f"  runtime tuning read failed: {exc}")
+            return
+        if not isinstance(data, dict):
+            print("  runtime tuning ignored: file is not a mapping")
+            return
+
+        if "is_manager" in data:
+            self._runtime_is_manager = bool(data["is_manager"])
+        if "extra_instruction" in data:
+            self._runtime_extra_instruction = str(data["extra_instruction"] or "")
+        if "paused" in data:
+            self.budget.paused = bool(data["paused"])
 
 
 def build_hub_loop(
@@ -549,6 +611,16 @@ def _normalize_address_text(value: str) -> str:
 
 def _is_distinct_agent_name(normalized_agent_name: str) -> bool:
     return "-" in normalized_agent_name or len(normalized_agent_name) >= 8
+
+
+_IMPORTANT_MESSAGE_MARKERS = ("done", "plan", "claim", "task")
+
+
+def _is_important_message(content: str) -> bool:
+    """Heuristic: messages that define shared state (plan, task claims, DONE) worth pinning."""
+
+    lowered = content.casefold()
+    return any(marker in lowered for marker in _IMPORTANT_MESSAGE_MARKERS)
 
 
 def _looks_like_shell_run_request(content: str) -> bool:
