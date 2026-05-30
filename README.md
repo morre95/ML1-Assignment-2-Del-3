@@ -68,7 +68,7 @@ Every request includes the hub password from `REACT_AGENT_HUB_PASSWORD`.
 Run hub mode with live console controls:
 
 ```bash
-docker compose run --rm agent hub --agent-name ErikMoren-agent --console
+docker compose run --rm agent hub --console
 ```
 
 Useful console commands:
@@ -88,7 +88,7 @@ quit
 or
 
 ```bash
-docker compose run --rm agent hub --console
+docker compose run --rm agent hub --console --config config/agents.example.yaml
 ```
 
 Start from a specific hub sequence number:
