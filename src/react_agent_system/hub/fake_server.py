@@ -160,36 +160,131 @@ class FakeHubHandler(BaseHTTPRequestHandler):
     def _handle_index(self) -> None:
         messages = self.store.dump_messages()
         stats = self.store.stats()
-        rows = "\n".join(
-            "<tr>"
-            f"<td>{message['seq']}</td>"
-            f"<td>{html.escape(message['timestamp'])}</td>"
-            f"<td>{html.escape(message['agent_name'])}</td>"
-            f"<td>{html.escape(message['content'])}</td>"
-            "</tr>"
-            for message in messages
+        bubbles = (
+            "\n".join(_render_bubble(message) for message in messages)
+            if messages
+            else '<p class="empty">No messages yet. Say hello below.</p>'
         )
+        password_literal = json.dumps(self.store.config.password)
         body = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Fake Hub</title>
   <style>
-    body {{ font-family: sans-serif; margin: 2rem; }}
-    table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #ccc; padding: 0.4rem; text-align: left; vertical-align: top; }}
-    td:last-child {{ white-space: pre-wrap; }}
-    code {{ background: #eee; padding: 0.1rem 0.25rem; }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      font-family: -apple-system, system-ui, sans-serif; margin: 0;
+      background: #f0f2f5; color: #111;
+    }}
+    .app {{
+      display: flex; flex-direction: column; height: 100vh;
+      max-width: 52rem; margin: 0 auto; background: #fff;
+      border-left: 1px solid #ddd; border-right: 1px solid #ddd;
+    }}
+    header {{
+      display: flex; align-items: baseline; gap: 0.75rem;
+      padding: 0.9rem 1.2rem; background: #075e54; color: #fff;
+    }}
+    header h1 {{ font-size: 1.15rem; margin: 0; }}
+    header .count {{ font-size: 0.8rem; opacity: 0.85; margin-left: auto; }}
+    header a {{ color: #cfe9e4; font-size: 0.8rem; }}
+    .messages {{ flex: 1; overflow-y: auto; padding: 1.2rem; }}
+    .empty {{ text-align: center; color: #888; margin-top: 2rem; }}
+    .msg {{ display: flex; margin-bottom: 0.6rem; }}
+    .msg.right {{ justify-content: flex-end; }}
+    .bubble {{
+      max-width: 75%; padding: 0.45rem 0.7rem; border-radius: 0.8rem;
+      background: #fff; border: 1px solid #e2e2e2;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.05); word-wrap: break-word;
+    }}
+    .msg.right .bubble {{ background: #dcf8c6; border-color: #c5edae; }}
+    .meta {{ display: flex; gap: 0.6rem; font-size: 0.72rem; margin-bottom: 0.15rem; }}
+    .meta .name {{ font-weight: 600; }}
+    .meta .time {{ color: #999; }}
+    .text {{ white-space: pre-wrap; line-height: 1.35; }}
+    .composer {{
+      display: flex; gap: 0.5rem; padding: 0.75rem; border-top: 1px solid #ddd;
+      background: #f7f7f7; align-items: flex-end;
+    }}
+    .composer .sender {{ width: 7rem; flex: none; }}
+    .composer textarea {{ flex: 1; height: 2.6rem; resize: vertical; }}
+    .composer input, .composer textarea {{
+      font: inherit; padding: 0.5rem 0.6rem; border: 1px solid #ccc;
+      border-radius: 1.2rem; background: #fff;
+    }}
+    .composer button {{
+      font: inherit; padding: 0 1.1rem; height: 2.6rem; flex: none; cursor: pointer;
+      border: none; border-radius: 1.3rem; background: #075e54; color: #fff;
+    }}
+    .error {{ color: #b00; padding: 0 0.75rem 0.6rem; min-height: 1rem; font-size: 0.85rem; }}
+    code {{ background: #eee; padding: 0.1rem 0.25rem; border-radius: 0.25rem; }}
   </style>
 </head>
 <body>
-  <h1>Fake Hub</h1>
-  <p>Messages: {stats["total_messages"]} / {stats["max_global"]}</p>
-  <p>Use <code>/api/dump?password={html.escape(self.store.config.password)}</code> for JSON.</p>
-  <table>
-    <thead><tr><th>Seq</th><th>Timestamp</th><th>Agent</th><th>Content</th></tr></thead>
-    <tbody>{rows}</tbody>
-  </table>
+  <div class="app">
+    <header>
+      <h1>Fake Hub</h1>
+      <a href="/api/dump?password={html.escape(self.store.config.password)}">JSON</a>
+      <span class="count">{stats["total_messages"]} / {stats["max_global"]}</span>
+    </header>
+    <div id="messages" class="messages">{bubbles}</div>
+    <form id="chat-form" class="composer">
+      <input id="chat-sender" class="sender" value="human" autocomplete="off" aria-label="From">
+      <textarea id="chat-content" autocomplete="off"
+        placeholder="Message — address an agent by name, e.g. 'builder, write hello world'"></textarea>
+      <button type="submit">Send</button>
+    </form>
+    <div id="chat-error" class="error"></div>
+  </div>
+  <script>
+    const PASSWORD = {password_literal};
+    const form = document.getElementById("chat-form");
+    const sender = document.getElementById("chat-sender");
+    const content = document.getElementById("chat-content");
+    const error = document.getElementById("chat-error");
+    const messages = document.getElementById("messages");
+    messages.scrollTop = messages.scrollHeight;
+    async function send() {{
+      error.textContent = "";
+      try {{
+        const response = await fetch("/api/seed", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{
+            agent_name: sender.value,
+            content: content.value,
+            password: PASSWORD,
+          }}),
+        }});
+        const data = await response.json();
+        if (!response.ok) {{
+          error.textContent = data.error || "send failed";
+          return;
+        }}
+        content.value = "";
+        window.location.reload();
+      }} catch (err) {{
+        error.textContent = String(err);
+      }}
+    }}
+    form.addEventListener("submit", (event) => {{
+      event.preventDefault();
+      send();
+    }});
+    content.addEventListener("keydown", (event) => {{
+      if (event.key === "Enter" && !event.shiftKey) {{
+        event.preventDefault();
+        send();
+      }}
+    }});
+    setInterval(() => {{
+      if (document.activeElement !== content && document.activeElement !== sender
+          && content.value === "") {{
+        window.location.reload();
+      }}
+    }}, 4000);
+  </script>
 </body>
 </html>"""
         encoded = body.encode("utf-8")
@@ -260,6 +355,24 @@ def main() -> None:
     )
     print(f"fake hub listening on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()
+
+
+_NAME_COLORS = ("#1f8a70", "#b5651d", "#5b3fa3", "#a3315b", "#2a6fb0", "#7a6a00")
+
+
+def _render_bubble(message: dict[str, Any]) -> str:
+    agent_name = message["agent_name"]
+    side = "right" if agent_name == "human" else "left"
+    color = _NAME_COLORS[sum(map(ord, agent_name)) % len(_NAME_COLORS)]
+    return (
+        f'<div class="msg {side}"><div class="bubble">'
+        f'<div class="meta">'
+        f'<span class="name" style="color:{color}">{html.escape(agent_name)}</span>'
+        f'<span class="time">{html.escape(message["timestamp"])}</span>'
+        f'</div>'
+        f'<div class="text">{html.escape(message["content"])}</div>'
+        f'</div></div>'
+    )
 
 
 def _first_value(value: Any) -> str | None:
