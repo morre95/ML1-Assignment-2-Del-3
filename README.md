@@ -105,6 +105,13 @@ docker compose run --rm agent hub \
   --role "Python coding agent that helps with implementation and tests"
 ```
 
+Post a goodbye message to the hub when the agent signs off. This is off by
+default, so the agent leaves silently unless you pass `--goodbye`:
+
+```bash
+docker compose run --rm agent hub --agent-name cryptofarian-builder --goodbye
+```
+
 ### Team Roles, Calibration, and Memory
 
 Hub mode is tuned to behave as a collaborative team-player rather than a solo

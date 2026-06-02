@@ -12,7 +12,7 @@ from react_agent_system.hub.client import (
     HubRateLimitError,
     RunPodHubClient,
 )
-from react_agent_system.hub.fake_server import FakeHubConfig, build_server
+from react_agent_system.hub.fake_server import FakeHubConfig, FakeHubStore, build_server
 from react_agent_system.hub.rate_limit import RateLimiter
 
 PASSWORD = "dev-hub-password"
@@ -98,6 +98,91 @@ def test_fake_hub_stats_dump_and_html_view(fake_hub_url: str) -> None:
     assert html.status_code == 200
     assert "text/html" in html.headers["Content-Type"]
     assert "reply" in html.text
+
+
+def test_fake_hub_blocks_and_unblocks_agent(fake_hub_url: str) -> None:
+    requests.post(
+        f"{fake_hub_url}/api/message",
+        json={"agent_name": "agent", "content": "hello", "password": PASSWORD},
+        timeout=5,
+    )
+
+    blocked = requests.post(
+        f"{fake_hub_url}/api/block",
+        json={"agent_name": "agent", "blocked": True, "password": PASSWORD},
+        timeout=5,
+    )
+    rejected = requests.post(
+        f"{fake_hub_url}/api/message",
+        json={"agent_name": "agent", "content": "blocked message", "password": PASSWORD},
+        timeout=5,
+    )
+    unblocked = requests.post(
+        f"{fake_hub_url}/api/block",
+        json={"agent_name": "agent", "blocked": False, "password": PASSWORD},
+        timeout=5,
+    )
+    allowed = requests.post(
+        f"{fake_hub_url}/api/message",
+        json={"agent_name": "agent", "content": "allowed again", "password": PASSWORD},
+        timeout=5,
+    )
+
+    assert blocked.status_code == 200
+    assert rejected.status_code == 403
+    assert rejected.json() == {"error": "agent is blocked"}
+    assert unblocked.status_code == 200
+    assert allowed.status_code == 200
+
+
+def test_fake_hub_agents_listed_in_html_excludes_humans(fake_hub_url: str) -> None:
+    requests.post(
+        f"{fake_hub_url}/api/seed",
+        json={"agent_name": "human", "content": "agent ping", "password": PASSWORD},
+        timeout=5,
+    )
+    requests.post(
+        f"{fake_hub_url}/api/message",
+        json={"agent_name": "agent", "content": "pong", "password": PASSWORD},
+        timeout=5,
+    )
+
+    html = requests.get(fake_hub_url, timeout=5)
+
+    assert html.status_code == 200
+    assert 'data-agent="agent"' in html.text
+    assert 'data-agent="human"' not in html.text
+
+
+def test_fake_hub_agents_report_message_counts_excluding_humans() -> None:
+    store = FakeHubStore(FakeHubConfig(password=PASSWORD))
+    store.add_message("human", "kick off")
+    store.add_message("builder", "one")
+    store.add_message("builder", "two")
+    store.add_message("reviewer", "lgtm")
+
+    assert store.agents() == [
+        {"agent_name": "builder", "blocked": False, "message_count": 2},
+        {"agent_name": "reviewer", "blocked": False, "message_count": 1},
+    ]
+
+
+def test_fake_hub_assigns_incrementing_sequence_numbers(fake_hub_url: str) -> None:
+    # Distinct senders avoid the fixture's per-agent cap of 2.
+    for name in ("alpha", "beta", "gamma"):
+        requests.post(
+            f"{fake_hub_url}/api/message",
+            json={"agent_name": name, "content": "hi", "password": PASSWORD},
+            timeout=5,
+        )
+
+    dump = requests.get(
+        f"{fake_hub_url}/api/dump",
+        params={"password": PASSWORD},
+        timeout=5,
+    )
+
+    assert [message["seq"] for message in dump.json()["messages"]] == [1, 2, 3]
 
 
 def test_fake_hub_rejects_wrong_password(fake_hub_url: str) -> None:

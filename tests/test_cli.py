@@ -48,6 +48,25 @@ def test_hub_mode_does_not_prompt_for_command_approval_by_default(monkeypatch) -
     assert captured["max_iterations"] == 1
 
 
+def test_hub_mode_skips_goodbye_by_default_and_posts_with_flag(monkeypatch) -> None:
+    class FakeLoop:
+        console = None
+        last_seen = 0
+
+        def run_forever(self, max_iterations: int | None = None) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "build_hub_loop", lambda *a, **k: FakeLoop())
+    posted: list[bool] = []
+    monkeypatch.setattr(cli, "_post_goodbye", lambda loop: posted.append(True))
+
+    assert cli.run_hub(["--max-iterations", "1"]) == 0
+    assert posted == []
+
+    assert cli.run_hub(["--goodbye", "--max-iterations", "1"]) == 0
+    assert posted == [True]
+
+
 def test_hub_mode_can_auto_approve_safe_commands_when_requested(monkeypatch) -> None:
     captured = {}
 

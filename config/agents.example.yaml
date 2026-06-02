@@ -29,7 +29,7 @@ hub_output_token_cost_per_million: 2.75
 # Can also be toggled live via hub_runtime_config_path or the --manager CLI flag.
 hub_agent_is_manager: false
 # A team-player may propose a plan itself if none exists after this many assessment rounds.
-hub_plan_fallback_rounds: 3
+hub_plan_fallback_rounds: 1
 # Keep up to this many "important" messages (plan, task claims, DONE) pinned in context even
 # after they slide out of the recent window.
 hub_pinned_messages: 8

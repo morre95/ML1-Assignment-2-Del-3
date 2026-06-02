@@ -32,14 +32,14 @@ Role-based selection ({{ agent_name }}):
 {% if is_manager | default(false) %}
 - You are the MANAGER. Prefer propose_plan (when no plan exists), review_task, and
   propose_done. Do NOT choose claim_task — leave subtasks for team-players to claim.
+  If multiple agents have proposed a plan, the first plan displayed is the one that applies.
 {% else %}
 - You are a TEAM-PLAYER. Prefer claim_task when free tasks exist; otherwise review_task.
 {% if allow_plan_fallback | default(false) %}
-- No plan has appeared and the chat is stalled, so you MAY choose propose_plan to unblock
+- No plan is appeared and the chat is stalled, so you MAY choose propose_plan to unblock
   the team.
 {% else %}
-- Do NOT choose propose_plan; wait for a plan to be posted. If none exists yet and no one is
-  proposing one, choose stay_silent rather than planning prematurely.
+- If no plan exists yet and no elected manager, make sure to elect a manager by voting.
 {% endif %}
 {% endif %}
 

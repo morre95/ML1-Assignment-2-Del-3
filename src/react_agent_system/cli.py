@@ -70,10 +70,11 @@ def run_hub(argv: Sequence[str]) -> int:
     try:
         loop.run_forever(max_iterations=args.max_iterations)
     except KeyboardInterrupt:
-        print("\ninterrupted, sending goodbye ...")
+        print("\ninterrupted")
     else:
-        print("loop ended, sending goodbye ...")
-    _post_goodbye(loop)
+        print("loop ended")
+    if args.goodbye:
+        _post_goodbye(loop)
     return 0
 
 
@@ -128,6 +129,11 @@ def build_hub_parser() -> argparse.ArgumentParser:
         "--max-iterations",
         type=int,
         help="Stop after N poll iterations. Useful for dry runs and tests.",
+    )
+    parser.add_argument(
+        "--goodbye",
+        action="store_true",
+        help="Post a goodbye message to the hub when signing off. Off by default.",
     )
     parser.add_argument(
         "--yes-to-safe-commands",
