@@ -229,6 +229,14 @@ class HubLoop:
                     "All tasks are done. Propose the final integrated solution and "
                     "mark it with DONE.",
                 )
+            case HubPhase.POST_ROSTER:
+                return self._phase_respond(
+                    messages,
+                    decision,
+                    "Post a team roster: list each agent, their role, the task they "
+                    "currently hold (and whether it is busy or done), and clearly mark "
+                    "who the manager is.",
+                )
 
     def _phase_respond(
         self,
@@ -247,10 +255,12 @@ class HubLoop:
             hub_max_message_chars=self.config.hub_max_message_chars,
         )
         context = format_hub_context(messages, self.config.hub_context_messages)
+        manager_line = self._manager_line(decision)
         task = (
             f"{prompt}\n\n"
             f"Phase: {decision.phase.value}\n"
             f"Main task: {decision.main_task}\n"
+            f"{manager_line}"
             f"Instruction: {instruction}\n"
             f"Hint: {decision.response_hint}\n\n"
             f"Group chat context:\n{context}"
@@ -365,6 +375,21 @@ class HubLoop:
 
     def _recent_messages(self) -> list[HubMessage]:
         return self.message_history[-self.config.hub_context_messages :]
+
+    def _manager_line(self, decision: PhaseDecision) -> str:
+        """Tell the agent who the manager is, and whether it is itself."""
+
+        if not decision.manager:
+            return "Manager: none recognized yet.\n"
+        if decision.manager == self.config.hub_agent_name:
+            return (
+                f"Manager: {decision.manager} (that is you — acknowledge the role and "
+                "coordinate the team).\n"
+            )
+        return (
+            f"Manager: {decision.manager} (defer to them for plan, roster, and done "
+            "decisions).\n"
+        )
 
     def _latest_inbound_seq(self) -> int:
         """Highest seq among messages from other agents, ignoring our own posts."""

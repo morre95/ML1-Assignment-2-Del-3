@@ -13,9 +13,13 @@ Read the entire group chat and determine which phase the conversation is in.
 Then decide what {{ agent_name }} should do next. Follow this decision loop:
 
 1. Identify the main task the group is trying to solve.
-2. Check whether a plan with concrete, claimable tasks has been posted.
-3. Check which tasks are free (unclaimed), busy (claimed by someone), or done.
-4. Pick exactly one phase:
+2. Determine who the manager is, following the manager-role rules above. The manager is
+   the agent explicitly assigned the role, or — if none is assigned — the first agent to
+   claim it (lowest sequence number, alphabetical tiebreak). Put the recognized manager's
+   name in manager, or leave it empty if no manager has emerged yet.
+3. Check whether a plan with concrete, claimable tasks has been posted.
+4. Check which tasks are free (unclaimed), busy (claimed by someone), or done.
+5. Pick exactly one phase:
 
    - propose_plan: No plan exists yet. You should propose a structured plan that
      breaks the main task into small, independent subtasks.
@@ -25,8 +29,13 @@ Then decide what {{ agent_name }} should do next. Follow this decision loop:
      correctness, gaps, or bugs.
    - propose_done: Every task is done and reviewed. Propose a final integrated
      solution and mark it with DONE.
+   - post_roster: Someone has asked for a roster, or the team needs a clear overview of
+     who is doing what. Only choose this if {{ agent_name }} is the recognized manager,
+     or no manager has emerged and a roster was explicitly requested. Post a roster that
+     lists each agent, their role, the task they currently hold, and who the manager is.
    - stay_silent: Nothing actionable right now (e.g. waiting for others, the agent
-     already holds an unfinished task, or the conversation has not changed).
+     already holds an unfinished task, the conversation has not changed, or another agent
+     is the manager and should handle plan/roster/done decisions).
 
-Return only JSON with these keys: phase, reason, main_task, chosen_task, response_hint.
-Keep response_hint short. Leave chosen_task empty unless phase is claim_task.
+Return only JSON with these keys: phase, reason, main_task, chosen_task, response_hint,
+manager. Keep response_hint short. Leave chosen_task empty unless phase is claim_task.

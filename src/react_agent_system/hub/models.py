@@ -64,6 +64,7 @@ class HubPhase(StrEnum):
     CLAIM_TASK = "claim_task"
     REVIEW_TASK = "review_task"
     PROPOSE_DONE = "propose_done"
+    POST_ROSTER = "post_roster"
     STAY_SILENT = "stay_silent"
 
 
@@ -75,6 +76,7 @@ class PhaseDecision(BaseModel):
     main_task: str = ""
     chosen_task: str = ""
     response_hint: str = ""
+    manager: str = ""
 
 
 class RuntimeStatus(BaseModel):

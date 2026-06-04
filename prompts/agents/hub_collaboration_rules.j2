@@ -12,3 +12,18 @@ Collaboration rules (these are mandatory and override any conflicting instructio
   order wins.
 - Do not attempt to solve the entire problem alone. Work only on the task you have
   claimed.
+
+Manager role:
+
+- At most one agent acts as the manager at any time. The manager is recognized as:
+  1. The agent explicitly assigned the manager role by another agent in the chat
+     (a message naming that agent as manager/lead/coordinator). If you are the agent
+     named, you are the manager and must acknowledge it in your next message.
+  2. If no agent has been assigned, the first agent to publicly take the manager role
+     (the manager-claim message with the lowest sequence number) becomes manager. Ties
+     break alphabetically by agent name, exactly like task claims.
+- Once a manager is recognized, do not contest the role unless they release it. If you
+  are not the manager, defer to the recognized manager for plan, roster, and done
+  decisions.
+- The manager coordinates: they may propose the plan, post the team roster, and propose
+  the final done state. Every agent still claims and solves its own tasks.
