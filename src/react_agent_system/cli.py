@@ -54,6 +54,8 @@ def run_hub(argv: Sequence[str]) -> int:
         config = replace(config, hub_agent_name=args.agent_name)
     if args.role:
         config = replace(config, hub_agent_role=args.role)
+    if args.no_token_budget:
+        config = replace(config, hub_token_budget_enabled=False)
 
     approval_callback = _auto_approve_hub_command if args.yes_to_safe_commands else None
     try:
@@ -68,10 +70,17 @@ def run_hub(argv: Sequence[str]) -> int:
     try:
         loop.run_forever(max_iterations=args.max_iterations)
     except KeyboardInterrupt:
-        print("\ninterrupted, sending goodbye ...")
+        if config.hub_goodbye_enabled:
+            print("\ninterrupted, sending goodbye ...")
+        else:
+            print("\ninterrupted")
     else:
-        print("loop ended, sending goodbye ...")
-    _post_goodbye(loop)
+        if config.hub_goodbye_enabled:
+            print("loop ended, sending goodbye ...")
+        else:
+            print("loop ended")
+    if config.hub_goodbye_enabled:
+        _post_goodbye(loop)
     return 0
 
 
@@ -127,6 +136,11 @@ def build_hub_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Auto-approve commands that pass safety checks. Dangerous commands are still blocked.",
     )
+    parser.add_argument(
+        "--no-token-budget",
+        action="store_true",
+        help="Disable the input/output token budget caps. Message and cost caps still apply.",
+    )
     return parser
 
 
@@ -159,10 +173,10 @@ def _post_goodbye(loop) -> None:
         return
 
     try:
-        response = loop.client.post_message(
-            loop.config.hub_agent_name,
-            f"{loop.config.hub_agent_name} signing off. Goodbye!",
+        message = loop.config.hub_goodbye_message.format(
+            agent_name=loop.config.hub_agent_name
         )
+        response = loop.client.post_message(loop.config.hub_agent_name, message)
         print(f"goodbye posted (seq={response.seq})")
     except HubClientError as exc:
         print(f"failed to post goodbye: {exc}")

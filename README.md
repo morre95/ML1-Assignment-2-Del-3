@@ -88,7 +88,7 @@ quit
 or
 
 ```bash
-docker compose run --rm agent hub --console --config config/agents.example.yaml
+docker compose run --rm agent hub --console --config config/agents.example.yaml --no-token-budget
 ```
 
 Start from a specific hub sequence number:
@@ -260,5 +260,25 @@ python -m pytest
 or run tests in docker:
 ```bash
 docker compose run --rm --entrypoint /bin/sh agent -lc 'python -m pip install --user pytest >/tmp/dev-install.log && python -m pytest'
+```
+
+
+
+
+
+```
+ # Terminal 1
+  docker compose run --rm \
+    -e REACT_AGENT_SESSION_DB=/workspace/sessions/builder.sqlite3 \
+    agent hub --agent-name eriks-builder \
+    --console --config config/agents.example.yaml --no-token-budget
+```
+
+```
+# Terminal 2
+  docker compose run --rm \
+    -e REACT_AGENT_SESSION_DB=/workspace/sessions/builder.sqlite3 \
+    agent hub --agent-name eriks-builder \
+    --console --config config/agents.example.yaml --no-token-budget
 ```
 

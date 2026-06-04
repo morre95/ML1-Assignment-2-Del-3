@@ -10,6 +10,8 @@ services:
       # Use mounted source so code changes apply without rebuilding the image.
       PYTHONPATH: /workspace/src
       REACT_AGENT_SESSION_DB: /workspace/sessions/agent-history.sqlite3
+      # Set to false (or pass `hub --no-token-budget`) to disable token budget caps.
+      REACT_AGENT_HUB_TOKEN_BUDGET: "true"
     stdin_open: true
     tty: true
     user: "${UID:-1000}:${GID:-1000}"

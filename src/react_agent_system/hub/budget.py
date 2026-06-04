@@ -27,6 +27,7 @@ class BudgetController:
         self.estimated_output_tokens = 0
         self.max_input_tokens = config.hub_max_input_tokens
         self.max_output_tokens = config.hub_max_output_tokens
+        self.token_budget_enabled = config.hub_token_budget_enabled
         self.estimated_cost = 0.0
         self.max_cost = config.hub_max_cost
         self.input_cost_per_million = config.hub_input_token_cost_per_million
@@ -39,10 +40,11 @@ class BudgetController:
                 return BudgetSnapshot(False, "hub loop is paused")
             if self.messages_sent >= self.max_messages:
                 return BudgetSnapshot(False, "message cap reached")
-            if self.estimated_input_tokens >= self.max_input_tokens:
-                return BudgetSnapshot(False, "input token budget reached")
-            if self.estimated_output_tokens >= self.max_output_tokens:
-                return BudgetSnapshot(False, "output token budget reached")
+            if self.token_budget_enabled:
+                if self.estimated_input_tokens >= self.max_input_tokens:
+                    return BudgetSnapshot(False, "input token budget reached")
+                if self.estimated_output_tokens >= self.max_output_tokens:
+                    return BudgetSnapshot(False, "output token budget reached")
             if self.max_cost is not None and self.estimated_cost >= self.max_cost:
                 return BudgetSnapshot(False, "cost budget reached")
             return BudgetSnapshot(True)

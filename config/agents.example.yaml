@@ -22,9 +22,12 @@ hub_max_message_chars: 4096
 hub_context_messages: 80
 hub_max_input_tokens: 20000
 hub_max_output_tokens: 10000
+hub_token_budget_enabled: true
 hub_max_cost:
 hub_input_token_cost_per_million: 0.25
 hub_output_token_cost_per_million: 2.75
+hub_goodbye_enabled: false
+hub_goodbye_message: "{agent_name} signing off. Goodbye!"
 prompts:
   planner: agents/planner.j2
   coder: agents/coder.j2

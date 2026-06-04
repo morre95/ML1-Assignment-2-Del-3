@@ -55,9 +55,12 @@ class AgentSystemConfig:
     hub_context_messages: int = 20
     hub_max_input_tokens: int = 30_000
     hub_max_output_tokens: int = 8_000
+    hub_token_budget_enabled: bool = True
     hub_max_cost: float | None = None
     hub_input_token_cost_per_million: float = 0.0
     hub_output_token_cost_per_million: float = 0.0
+    hub_goodbye_enabled: bool = False
+    hub_goodbye_message: str = "{agent_name} signing off. Goodbye!"
     prompts: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PROMPTS))
 
 
@@ -136,12 +139,20 @@ def load_config(
         hub_context_messages=int(raw.get("hub_context_messages", 20)),
         hub_max_input_tokens=int(raw.get("hub_max_input_tokens", 30_000)),
         hub_max_output_tokens=int(raw.get("hub_max_output_tokens", 8_000)),
+        hub_token_budget_enabled=_bool_from_config(
+            _env_value("REACT_AGENT_HUB_TOKEN_BUDGET", dotenv)
+            or raw.get("hub_token_budget_enabled", True)
+        ),
         hub_max_cost=_optional_float(raw.get("hub_max_cost")),
         hub_input_token_cost_per_million=float(
             raw.get("hub_input_token_cost_per_million", 0.0)
         ),
         hub_output_token_cost_per_million=float(
             raw.get("hub_output_token_cost_per_million", 0.0)
+        ),
+        hub_goodbye_enabled=_bool_from_config(raw.get("hub_goodbye_enabled", False)),
+        hub_goodbye_message=str(
+            raw.get("hub_goodbye_message", "{agent_name} signing off. Goodbye!")
         ),
         prompts={**DEFAULT_PROMPTS, **dict(raw.get("prompts", {}))},
     )
