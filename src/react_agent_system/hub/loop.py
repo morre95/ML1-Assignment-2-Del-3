@@ -107,8 +107,8 @@ class HubLoop:
     def _run_state_machine(self) -> str:
         """Proactive state-machine path: read full chat, identify phase, act."""
 
-        latest_seq = self.message_history[-1].seq if self.message_history else 0
-        if latest_seq == self._last_assessed_seq:
+        latest_inbound_seq = self._latest_inbound_seq()
+        if latest_inbound_seq == self._last_assessed_seq:
             return ""
 
         context_messages = self._recent_messages()
@@ -126,7 +126,7 @@ class HubLoop:
             decision = self.state_assessor.assess(context_messages)
         except Exception as exc:
             return f"phase assessment failed ({type(exc).__name__}): {exc}"
-        self._last_assessed_seq = latest_seq
+        self._last_assessed_seq = latest_inbound_seq
         self.budget.record_output_text(decision.model_dump_json(), posted=False)
         print(f"  phase: {decision.phase.value} reason={decision.reason}")
 
@@ -347,7 +347,6 @@ class HubLoop:
             self._remember_messages(
                 [HubMessage(seq=response.seq, agent_name=self.config.hub_agent_name, content=chunk)]
             )
-            self._last_assessed_seq = response.seq
             self.budget.record_output_text(chunk, posted=True)
             posted_seqs.append(response.seq)
 
@@ -366,6 +365,18 @@ class HubLoop:
 
     def _recent_messages(self) -> list[HubMessage]:
         return self.message_history[-self.config.hub_context_messages :]
+
+    def _latest_inbound_seq(self) -> int:
+        """Highest seq among messages from other agents, ignoring our own posts."""
+
+        return max(
+            (
+                message.seq
+                for message in self.message_history
+                if message.agent_name != self.config.hub_agent_name
+            ),
+            default=0,
+        )
 
     def _is_reply_to_pending_question(self, message: HubMessage) -> bool:
         previous_messages = [
