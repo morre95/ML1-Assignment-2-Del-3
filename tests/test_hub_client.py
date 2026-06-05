@@ -142,6 +142,41 @@ def test_post_message_accepts_live_hub_ok_response() -> None:
     assert response.seq == 17
 
 
+def test_post_message_tolerates_null_state_fields() -> None:
+    session = FakeSession()
+    session.next_response = FakeResponse(
+        200,
+        {"ok": True, "seq": 5, "paused": None, "manager": None, "allowed_agents": None},
+    )
+    client = RunPodHubClient("https://hub.example", "secret", RateLimiter(0), session=session)
+
+    response = client.post_message("agent", "content")
+
+    assert response.seq == 5
+    assert response.paused is False
+    assert response.manager == ""
+    assert response.allowed_agents == {}
+
+
+def test_fetch_messages_tolerates_null_stats_fields() -> None:
+    session = FakeSession()
+    session.next_response = FakeResponse(
+        200,
+        {
+            "messages": [],
+            "stats": {"paused": None, "allowed_agents": None, "billboard": None, "files": None},
+        },
+    )
+    client = RunPodHubClient("https://hub.example", "secret", RateLimiter(0), session=session)
+
+    response = client.fetch_messages(since=0)
+
+    assert response.stats.paused is False
+    assert response.stats.allowed_agents == {}
+    assert response.stats.billboard.content == ""
+    assert response.stats.files == []
+
+
 def test_fetch_state_maps_401_to_auth_error() -> None:
     session = FakeSession()
     session.next_response = FakeResponse(401, {"error": "bad password"})

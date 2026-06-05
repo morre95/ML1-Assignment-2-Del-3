@@ -3,8 +3,27 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class _NullTolerantModel(BaseModel):
+    """Base model that treats an explicit JSON null as an omitted field.
+
+    The live hub sometimes sends keys with null values (e.g. allowed_agents)
+    instead of omitting them; this lets the field default apply instead of
+    failing validation.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_null_values(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if value is not None}
+        return data
 
 
 class AssessmentAction(StrEnum):
@@ -24,10 +43,8 @@ class HubMessage(BaseModel):
     timestamp: str | None = None
 
 
-class HubFileSummary(BaseModel):
+class HubFileSummary(_NullTolerantModel):
     """Lightweight file listing entry from the shared file store."""
-
-    model_config = ConfigDict(extra="ignore")
 
     filename: str
     size: int = 0
@@ -35,10 +52,8 @@ class HubFileSummary(BaseModel):
     updated_at: str = ""
 
 
-class HubFileContent(BaseModel):
+class HubFileContent(_NullTolerantModel):
     """Full content of a single shared file."""
-
-    model_config = ConfigDict(extra="ignore")
 
     filename: str
     content: str = ""
@@ -46,20 +61,16 @@ class HubFileContent(BaseModel):
     updated_at: str = ""
 
 
-class HubBillboard(BaseModel):
+class HubBillboard(_NullTolerantModel):
     """The shared project plan posted by the manager."""
-
-    model_config = ConfigDict(extra="ignore")
 
     content: str = ""
     updated_by: str = ""
     updated_at: str = ""
 
 
-class HubState(BaseModel):
+class HubState(_NullTolerantModel):
     """Hub runtime state embedded in the messages response."""
-
-    model_config = ConfigDict(extra="ignore")
 
     paused: bool = False
     manager: str = ""
@@ -68,25 +79,21 @@ class HubState(BaseModel):
     files: list[HubFileSummary] = Field(default_factory=list)
 
 
-class HubMessagesResponse(BaseModel):
+class HubMessagesResponse(_NullTolerantModel):
     messages: list[HubMessage] = Field(default_factory=list)
     stats: HubState = Field(default_factory=HubState)
 
 
-class HubFilesResponse(BaseModel):
+class HubFilesResponse(_NullTolerantModel):
     files: list[HubFileSummary] = Field(default_factory=list)
 
 
-class HubFileUploadResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
+class HubFileUploadResponse(_NullTolerantModel):
     ok: bool = True
     filename: str = ""
 
 
-class HubPostResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
+class HubPostResponse(_NullTolerantModel):
     seq: int
     status: str | None = None
     ok: bool | None = None
