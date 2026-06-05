@@ -10,18 +10,25 @@ from react_agent_system.hub.models import (
     HubMessage,
     HubMessagesResponse,
     HubPostResponse,
+    HubState,
 )
 
 
 class FakeClient:
-    def __init__(self, messages: list[HubMessage]) -> None:
+    def __init__(
+        self,
+        messages: list[HubMessage],
+        state: HubState | None = None,
+    ) -> None:
         self.messages = messages
+        self.state = state or HubState()
         self.posts = []
         self.next_post_seq = 99
 
     def fetch_messages(self, since: int) -> HubMessagesResponse:
         return HubMessagesResponse(
-            messages=[message for message in self.messages if message.seq > since]
+            messages=[message for message in self.messages if message.seq > since],
+            stats=self.state,
         )
 
     def post_message(self, agent_name: str, content: str) -> HubPostResponse:
@@ -126,6 +133,54 @@ def test_hub_loop_gates_unaddressed_message_without_assessment(tmp_path: Path) -
     result = loop.run_once()
 
     assert "no message explicitly addressed" in result
+    assert assessor.calls == []
+    assert client.posts == []
+
+
+def test_hub_loop_skips_when_server_paused(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient(
+        [HubMessage(seq=1, agent_name="other", content="@me please code")],
+        state=HubState(paused=True),
+    )
+    assessor = FakeAssessor(
+        AssessmentDecision(action=AssessmentAction.RESPOND, reason="would respond")
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "paused by server" in result
+    assert assessor.calls == []
+    assert client.posts == []
+
+
+def test_hub_loop_skips_when_manager_blocks_agent(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    client = FakeClient(
+        [HubMessage(seq=1, agent_name="other", content="@me please code")],
+        state=HubState(allowed_agents={"me": False}),
+    )
+    assessor = FakeAssessor(
+        AssessmentDecision(action=AssessmentAction.RESPOND, reason="would respond")
+    )
+    loop = HubLoop(
+        config=config,
+        client=client,
+        assessor=assessor,
+        agent_system=FakeAgentSystem(),
+        budget=BudgetController(config),
+    )
+
+    result = loop.run_once()
+
+    assert "has not allowed me to act" in result
     assert assessor.calls == []
     assert client.posts == []
 

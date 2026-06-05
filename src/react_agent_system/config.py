@@ -43,15 +43,18 @@ class AgentSystemConfig:
     command_timeout_seconds: int = 30
     web_search_max_results: int = 5
     require_bash_approval: bool = True
-    hub_url: str = "https://wb48jtfnjng6on-8080.proxy.runpod.net"
+    hub_url: str = "https://z0yncxbipft4e8-8080.proxy.runpod.net"
     hub_password: str | None = None
     hub_agent_name: str = "cryptofarian-builder"
     hub_agent_aliases: list[str] = field(default_factory=list)
     hub_agent_role: str = "You are a concise software-building agent in a group chat."
+    hub_role: str = "developer"
     hub_poll_interval_seconds: float = 4.0
     hub_request_interval_seconds: float = 1.0
     hub_max_messages: int = 10
     hub_max_message_chars: int = 4096
+    hub_max_file_bytes: int = 32_768
+    hub_max_files: int = 50
     hub_context_messages: int = 20
     hub_max_input_tokens: int = 30_000
     hub_max_output_tokens: int = 8_000
@@ -110,7 +113,7 @@ def load_config(
         hub_url=_env_value(
             "REACT_AGENT_HUB_URL",
             dotenv,
-            str(raw.get("hub_url", "https://wb48jtfnjng6on-8080.proxy.runpod.net")),
+            str(raw.get("hub_url", "https://z0yncxbipft4e8-8080.proxy.runpod.net")),
         ),
         hub_password=_env_value("REACT_AGENT_HUB_PASSWORD", dotenv) or raw.get("hub_password"),
         hub_agent_name=_env_value(
@@ -132,10 +135,17 @@ def load_config(
                 )
             ),
         ),
+        hub_role=_env_value(
+            "REACT_AGENT_HUB_ROLE",
+            dotenv,
+            str(raw.get("hub_role", "developer")),
+        ),
         hub_poll_interval_seconds=float(raw.get("hub_poll_interval_seconds", 4.0)),
         hub_request_interval_seconds=float(raw.get("hub_request_interval_seconds", 1.0)),
         hub_max_messages=int(raw.get("hub_max_messages", 10)),
         hub_max_message_chars=int(raw.get("hub_max_message_chars", 4096)),
+        hub_max_file_bytes=int(raw.get("hub_max_file_bytes", 32_768)),
+        hub_max_files=int(raw.get("hub_max_files", 50)),
         hub_context_messages=int(raw.get("hub_context_messages", 20)),
         hub_max_input_tokens=int(raw.get("hub_max_input_tokens", 30_000)),
         hub_max_output_tokens=int(raw.get("hub_max_output_tokens", 8_000)),

@@ -26,6 +26,7 @@ from react_agent_system.hub.models import (
     AssessmentDecision,
     HubMessage,
     HubPhase,
+    HubState,
     PhaseDecision,
 )
 from react_agent_system.hub.rate_limit import RateLimiter
@@ -48,6 +49,7 @@ class HubLoop:
     last_seen: int = 0
     _last_assessed_seq: int = 0
     message_history: list[HubMessage] = field(default_factory=list)
+    latest_state: HubState = field(default_factory=HubState)
     agent_thread_id: str | None = None
 
     def run_forever(self, max_iterations: int | None = None) -> None:
@@ -79,6 +81,11 @@ class HubLoop:
             return f"hub rate limit: {exc}"
         except HubClientError as exc:
             return f"hub request failed: {exc}"
+
+        self.latest_state = response.stats
+        gate = self._hub_state_gate()
+        if gate is not None:
+            return gate
 
         if response.messages:
             messages = sorted(response.messages, key=lambda message: message.seq)
@@ -253,11 +260,13 @@ class HubLoop:
             agent_name=self.config.hub_agent_name,
             agent_role=self.config.hub_agent_role,
             hub_max_message_chars=self.config.hub_max_message_chars,
+            hub_max_file_bytes=self.config.hub_max_file_bytes,
         )
         context = format_hub_context(messages, self.config.hub_context_messages)
         manager_line = self._manager_line(decision)
         task = (
             f"{prompt}\n\n"
+            f"{self._state_context()}\n\n"
             f"Phase: {decision.phase.value}\n"
             f"Main task: {decision.main_task}\n"
             f"{manager_line}"
@@ -296,10 +305,12 @@ class HubLoop:
             agent_name=self.config.hub_agent_name,
             agent_role=self.config.hub_agent_role,
             hub_max_message_chars=self.config.hub_max_message_chars,
+            hub_max_file_bytes=self.config.hub_max_file_bytes,
         )
         context = format_hub_context(messages, self.config.hub_context_messages)
         task = (
             f"{prompt}\n\n"
+            f"{self._state_context()}\n\n"
             f"Internal assessment reason: {decision.reason}\n"
             f"Suggested response focus: {decision.response_hint}\n\n"
             f"Group chat context:\n{context}"
@@ -430,6 +441,28 @@ class HubLoop:
             f"Reason: {decision.reason}"
         )
 
+    def _hub_state_gate(self) -> str | None:
+        """Skip the turn when the server paused us or the manager blocked us."""
+
+        if self.latest_state.paused:
+            return "hub state: paused by server, skipping turn"
+        allowed = self.latest_state.allowed_agents
+        if allowed and not allowed.get(self.config.hub_agent_name, True):
+            return f"hub state: manager has not allowed {self.config.hub_agent_name} to act"
+        return None
+
+    def _state_context(self) -> str:
+        """Format the billboard plan and shared file list for the agent prompt."""
+
+        billboard = self.latest_state.billboard.content.strip()
+        files = self.latest_state.files
+        file_summary = ", ".join(file.filename for file in files) if files else "none yet"
+        lines: list[str] = []
+        if billboard:
+            lines.append(f"[BILLBOARD / PROJECT PLAN]:\n{billboard}")
+        lines.append(f"[SHARED FILES]: {file_summary}")
+        return "\n".join(lines)
+
     def _quit_requested(self) -> bool:
         return self.console is not None and self.console.should_quit
 
@@ -456,19 +489,27 @@ def build_hub_loop(
         base_url=config.hub_url,
         password=config.hub_password,
         rate_limiter=rate_limiter,
+        role=config.hub_role,
+        max_file_bytes=config.hub_max_file_bytes,
     )
     assessor = HubAssessor(config, chat_model)
     state_assessor = HubStateAssessor(config, chat_model)
     agent_system = build_agent_system(
         config=config,
         approval_callback=approval_callback,
-        stats_callback=lambda: client.fetch_stats().model_dump_json(),
+        stats_callback=lambda: client.fetch_state().model_dump_json(),
+        upload_file_callback=lambda filename, content: client.upload_file(
+            config.hub_agent_name, filename, content
+        ).model_dump_json(),
+        read_file_callback=lambda filename: client.read_file(filename).model_dump_json(),
+        list_files_callback=lambda: client.list_files().model_dump_json(),
+        billboard_callback=lambda: client.fetch_billboard().model_dump_json(),
         model=chat_model,
         hub_mode=True,
     )
     console = ConsoleController(
         budget,
-        stats_callback=lambda: client.fetch_stats().model_dump_json(),
+        stats_callback=lambda: client.fetch_state().model_dump_json(),
     )
     return HubLoop(
         config=config,

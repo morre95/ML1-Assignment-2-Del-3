@@ -19,6 +19,10 @@ from react_agent_system.tools.research import weather_lookup, web_search, wikipe
 
 AgentInvoker = Callable[[str], str]
 StatsCallback = Callable[[], str]
+UploadFileCallback = Callable[[str, str], str]
+ReadFileCallback = Callable[[str], str]
+ListFilesCallback = Callable[[], str]
+BillboardCallback = Callable[[], str]
 
 
 def build_research_tools(max_web_results: int) -> list[BaseTool]:
@@ -65,11 +69,71 @@ def build_hub_tools(stats_callback: StatsCallback | None) -> list[BaseTool]:
 
     @tool("hub_stats")
     def hub_stats_tool() -> str:
-        """Fetch current hub server stats, including message caps and per-agent usage."""
+        """Fetch current hub state: pause flag, manager, billboard, and shared files."""
 
         return stats_callback()
 
     return [hub_stats_tool]
+
+
+def build_hub_file_tools(
+    upload_callback: UploadFileCallback | None,
+    read_callback: ReadFileCallback | None,
+    list_callback: ListFilesCallback | None,
+    billboard_callback: BillboardCallback | None,
+) -> list[BaseTool]:
+    """Create tools for the shared hub file store and project billboard.
+
+    The shared files are the team's deliverable, so the agent contributes code
+    through these tools rather than only the local workspace.
+    """
+
+    tools: list[BaseTool] = []
+
+    if upload_callback is not None:
+
+        @tool("hub_upload_file")
+        def hub_upload_file_tool(filename: str, content: str) -> str:
+            """Upload or replace a file in the shared hub store (e.g. game.py).
+
+            Read the file with hub_read_file first if it already exists.
+            """
+
+            return upload_callback(filename, content)
+
+        tools.append(hub_upload_file_tool)
+
+    if read_callback is not None:
+
+        @tool("hub_read_file")
+        def hub_read_file_tool(filename: str) -> str:
+            """Read the current content of a shared hub file before modifying it."""
+
+            return read_callback(filename)
+
+        tools.append(hub_read_file_tool)
+
+    if list_callback is not None:
+
+        @tool("hub_list_files")
+        def hub_list_files_tool() -> str:
+            """List all files currently in the shared hub store."""
+
+            return list_callback()
+
+        tools.append(hub_list_files_tool)
+
+    if billboard_callback is not None:
+
+        @tool("hub_read_billboard")
+        def hub_read_billboard_tool() -> str:
+            """Read the shared project plan (billboard) posted by the manager."""
+
+            return billboard_callback()
+
+        tools.append(hub_read_billboard_tool)
+
+    return tools
 
 
 def build_repo_tools(

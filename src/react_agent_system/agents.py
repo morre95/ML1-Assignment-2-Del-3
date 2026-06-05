@@ -13,9 +13,14 @@ from react_agent_system.llm import build_chat_model
 from react_agent_system.prompts import PromptLibrary
 from react_agent_system.session import build_sqlite_checkpointer, build_thread_config
 from react_agent_system.tools.factory import (
+    BillboardCallback,
+    ListFilesCallback,
+    ReadFileCallback,
     StatsCallback,
+    UploadFileCallback,
     build_agent_tool,
     build_github_tools,
+    build_hub_file_tools,
     build_hub_tools,
     build_repo_tools,
     build_research_tools,
@@ -41,6 +46,10 @@ def build_agent_system(
     config: AgentSystemConfig,
     approval_callback: ApprovalCallback | None = None,
     stats_callback: StatsCallback | None = None,
+    upload_file_callback: UploadFileCallback | None = None,
+    read_file_callback: ReadFileCallback | None = None,
+    list_files_callback: ListFilesCallback | None = None,
+    billboard_callback: BillboardCallback | None = None,
     model: Any | None = None,
     checkpointer: Any | None = None,
     *,
@@ -57,7 +66,12 @@ def build_agent_system(
     )
     research_tools = build_research_tools(config.web_search_max_results)
     github_tools = build_github_tools()
-    hub_tools = build_hub_tools(stats_callback)
+    hub_tools = build_hub_tools(stats_callback) + build_hub_file_tools(
+        upload_file_callback,
+        read_file_callback,
+        list_files_callback,
+        billboard_callback,
+    )
 
     summary_agent = create_react_agent(
         model=chat_model,
@@ -158,6 +172,7 @@ def build_agent_system(
     supervisor_prompt_context: dict[str, Any] = {
         "hub_mode": hub_mode,
         "hub_max_message_chars": config.hub_max_message_chars,
+        "hub_max_file_bytes": config.hub_max_file_bytes,
     }
 
     app = create_react_agent(

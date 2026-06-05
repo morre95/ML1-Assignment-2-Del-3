@@ -7,8 +7,19 @@ from typing import Any
 
 import requests
 
-from react_agent_system.hub.models import HubMessagesResponse, HubPostResponse, HubStats
+from react_agent_system.hub.models import (
+    HubBillboard,
+    HubFileContent,
+    HubFilesResponse,
+    HubFileUploadResponse,
+    HubMessagesResponse,
+    HubPostResponse,
+    HubState,
+)
 from react_agent_system.hub.rate_limit import RateLimiter
+
+# Probe sequence high enough that the messages response carries only hub state.
+_STATE_PROBE_SINCE = 2**62
 
 
 class HubClientError(RuntimeError):
@@ -36,6 +47,8 @@ class RunPodHubClient:
     rate_limiter: RateLimiter
     session: requests.Session | None = None
     timeout_seconds: int = 20
+    role: str = "developer"
+    max_file_bytes: int = 32_768
 
     def __post_init__(self) -> None:
         if not self.password:
@@ -61,6 +74,7 @@ class RunPodHubClient:
             json={
                 "agent_name": agent_name,
                 "content": content,
+                "role": self.role,
                 "password": self.password,
             },
             timeout=self.timeout_seconds,
@@ -68,15 +82,61 @@ class RunPodHubClient:
         data = self._json_or_raise(response)
         return HubPostResponse.model_validate(data)
 
-    def fetch_stats(self) -> HubStats:
+    def fetch_state(self) -> HubState:
+        """Fetch current hub state (pause, manager, billboard, files)."""
+
+        return self.fetch_messages(since=_STATE_PROBE_SINCE).stats
+
+    def upload_file(self, agent_name: str, filename: str, content: str) -> HubFileUploadResponse:
+        byte_size = len(content.encode("utf-8"))
+        if byte_size > self.max_file_bytes:
+            raise HubClientError(
+                f"File '{filename}' is {byte_size} bytes, over the "
+                f"{self.max_file_bytes}-byte hub limit."
+            )
+        self.rate_limiter.wait()
+        response = self.session.post(
+            f"{self.base_url}/api/files",
+            json={
+                "agent_name": agent_name,
+                "filename": filename,
+                "content": content,
+                "password": self.password,
+            },
+            timeout=self.timeout_seconds,
+        )
+        data = self._json_or_raise(response)
+        return HubFileUploadResponse.model_validate(data)
+
+    def list_files(self) -> HubFilesResponse:
         self.rate_limiter.wait()
         response = self.session.get(
-            f"{self.base_url}/api/stats",
+            f"{self.base_url}/api/files",
             params={"password": self.password},
             timeout=self.timeout_seconds,
         )
         data = self._json_or_raise(response)
-        return HubStats.model_validate(data)
+        return HubFilesResponse.model_validate(data)
+
+    def read_file(self, filename: str) -> HubFileContent:
+        self.rate_limiter.wait()
+        response = self.session.get(
+            f"{self.base_url}/api/files",
+            params={"filename": filename, "password": self.password},
+            timeout=self.timeout_seconds,
+        )
+        data = self._json_or_raise(response)
+        return HubFileContent.model_validate(data)
+
+    def fetch_billboard(self) -> HubBillboard:
+        self.rate_limiter.wait()
+        response = self.session.get(
+            f"{self.base_url}/api/billboard",
+            params={"password": self.password},
+            timeout=self.timeout_seconds,
+        )
+        data = self._json_or_raise(response)
+        return HubBillboard.model_validate(data)
 
     def _json_or_raise(self, response: requests.Response) -> dict[str, Any]:
         if response.status_code == 401:

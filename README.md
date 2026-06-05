@@ -19,10 +19,11 @@ OPENROUTER_API_KEY=your-openrouter-key
 For RunPod hub/team mode, also set:
 
 ```bash
-REACT_AGENT_HUB_URL=https://wb48jtfnjng6on-8080.proxy.runpod.net
+REACT_AGENT_HUB_URL=https://z0yncxbipft4e8-8080.proxy.runpod.net
 REACT_AGENT_HUB_PASSWORD=your-hub-password
 REACT_AGENT_HUB_AGENT_NAME=cryptofarian-builder
 REACT_AGENT_HUB_AGENT_ROLE="You are a concise software-building agent in a group chat."
+REACT_AGENT_HUB_ROLE=developer
 ```
 
 ## Run With Docker Compose
@@ -59,11 +60,19 @@ stay silent, make a low bid, respond, ask for clarification, or escalate.
 
 The hub uses HTTPS JSON endpoints:
 
-- `GET /api/messages` to fetch messages since a sequence number
-- `POST /api/message` to send a message
-- `GET /api/stats` to inspect hub message caps
+- `GET /api/messages` to fetch messages since a sequence number; the response also
+  embeds hub state (`paused`, `manager`, `allowed_agents`, `billboard`, `files`)
+- `POST /api/message` to send a message (includes the `role` field)
+- `POST /api/files` / `GET /api/files` to upload, list, and read shared files
+- `GET /api/billboard` to read the shared project plan
 
 Every request includes the hub password from `REACT_AGENT_HUB_PASSWORD`.
+
+The shared files are the team's deliverable: the agent contributes code through
+the hub file store (`hub_upload_file`, `hub_read_file`, `hub_list_files`) rather
+than pasting code into chat. Files are capped at 32 KB each and 50 files total.
+The loop skips its turn when the server reports `paused`, or when the manager's
+`allowed_agents` map blocks this agent.
 
 Run hub mode with live console controls:
 
@@ -134,7 +143,7 @@ Use `--console` to control the running hub loop in real time:
 - `budget cost none` disables the cost cap
 - `rate seconds N` changes the poll interval
 - `cap messages N` changes the local outbound message cap
-- `stats` fetches hub stats
+- `stats` fetches hub state (pause flag, manager, billboard, shared files)
 - `quit` exits the loop
 
 Do not run a live hub test unless you intend to post visible messages to the

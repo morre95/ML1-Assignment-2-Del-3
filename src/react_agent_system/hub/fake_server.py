@@ -6,7 +6,6 @@ import argparse
 import html
 import json
 import threading
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -20,6 +19,8 @@ DEFAULT_PASSWORD = "dev-hub-password"
 DEFAULT_MAX_PER_AGENT = 20
 DEFAULT_MAX_GLOBAL = 500
 MAX_MESSAGE_CHARS = 4096
+MAX_FILE_BYTES = 32_768
+MAX_FILES = 50
 
 
 class FakeHubError(ValueError):
@@ -36,14 +37,23 @@ class FakeHubConfig:
     max_per_agent: int = DEFAULT_MAX_PER_AGENT
     max_global: int = DEFAULT_MAX_GLOBAL
     max_message_chars: int = MAX_MESSAGE_CHARS
+    max_file_bytes: int = MAX_FILE_BYTES
+    max_files: int = MAX_FILES
 
 
 @dataclass
 class FakeHubStore:
-    """Thread-safe in-memory message store for the fake hub."""
+    """Thread-safe in-memory store mirroring the new hub API."""
 
     config: FakeHubConfig
     messages: list[dict[str, Any]] = field(default_factory=list)
+    files: dict[str, dict[str, Any]] = field(default_factory=dict)
+    billboard: dict[str, Any] = field(
+        default_factory=lambda: {"content": "", "updated_by": "", "updated_at": ""}
+    )
+    paused: bool = False
+    manager: str = ""
+    allowed_agents: dict[str, bool] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def add_message(self, agent_name: str, content: str) -> dict[str, Any]:
@@ -60,17 +70,15 @@ class FakeHubStore:
             if len(self.messages) >= self.config.max_global:
                 raise FakeHubError("global message cap reached", HTTPStatus.TOO_MANY_REQUESTS)
 
-            per_agent = Counter(message["agent_name"] for message in self.messages)
-            if per_agent[agent_name] >= self.config.max_per_agent:
+            per_agent = self._per_agent_counts()
+            if per_agent.get(agent_name, 0) >= self.config.max_per_agent:
                 raise FakeHubError("agent message cap reached", HTTPStatus.TOO_MANY_REQUESTS)
 
             message = {
                 "seq": len(self.messages) + 1,
                 "agent_name": agent_name,
                 "content": content,
-                "timestamp": (
-                    datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-                ),
+                "timestamp": _now(),
             }
             self.messages.append(message)
             return dict(message)
@@ -79,24 +87,107 @@ class FakeHubStore:
         with self._lock:
             return [dict(message) for message in self.messages if message["seq"] > since]
 
+    def upload_file(self, agent_name: str, filename: str, content: str) -> dict[str, Any]:
+        agent_name = agent_name.strip()
+        filename = filename.strip()
+        if not agent_name:
+            raise FakeHubError("agent_name is required", HTTPStatus.BAD_REQUEST)
+        if not filename:
+            raise FakeHubError("filename is required", HTTPStatus.BAD_REQUEST)
+        byte_size = len(content.encode("utf-8"))
+        if byte_size > self.config.max_file_bytes:
+            raise FakeHubError("file too large", HTTPStatus.BAD_REQUEST)
+
+        with self._lock:
+            if filename not in self.files and len(self.files) >= self.config.max_files:
+                raise FakeHubError("file cap reached", HTTPStatus.TOO_MANY_REQUESTS)
+            self.files[filename] = {
+                "filename": filename,
+                "content": content,
+                "author": agent_name,
+                "size": byte_size,
+                "updated_at": _now(),
+            }
+            return {"ok": True, "filename": filename}
+
+    def list_files(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {
+                    "filename": entry["filename"],
+                    "size": entry["size"],
+                    "author": entry["author"],
+                    "updated_at": entry["updated_at"],
+                }
+                for entry in sorted(self.files.values(), key=lambda item: item["filename"])
+            ]
+
+    def read_file(self, filename: str) -> dict[str, Any]:
+        with self._lock:
+            entry = self.files.get(filename)
+            if entry is None:
+                raise FakeHubError("file not found", HTTPStatus.NOT_FOUND)
+            return {
+                "filename": entry["filename"],
+                "content": entry["content"],
+                "author": entry["author"],
+                "updated_at": entry["updated_at"],
+            }
+
+    def set_billboard(self, content: str, updated_by: str) -> dict[str, Any]:
+        with self._lock:
+            self.billboard = {
+                "content": content,
+                "updated_by": updated_by,
+                "updated_at": _now(),
+            }
+            return dict(self.billboard)
+
+    def get_billboard(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self.billboard)
+
+    def set_controls(
+        self,
+        paused: bool | None = None,
+        manager: str | None = None,
+        allowed_agents: dict[str, bool] | None = None,
+    ) -> None:
+        with self._lock:
+            if paused is not None:
+                self.paused = paused
+            if manager is not None:
+                self.manager = manager
+            if allowed_agents is not None:
+                self.allowed_agents = dict(allowed_agents)
+
+    def state(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "paused": self.paused,
+                "manager": self.manager,
+                "allowed_agents": dict(self.allowed_agents),
+                "billboard": dict(self.billboard),
+                "files": [
+                    {
+                        "filename": entry["filename"],
+                        "size": entry["size"],
+                        "author": entry["author"],
+                        "updated_at": entry["updated_at"],
+                    }
+                    for entry in sorted(self.files.values(), key=lambda item: item["filename"])
+                ],
+            }
+
     def dump_messages(self) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(message) for message in self.messages]
 
-    def stats(self) -> dict[str, Any]:
-        with self._lock:
-            per_agent = Counter(message["agent_name"] for message in self.messages)
-            return {
-                "per_agent": dict(per_agent),
-                "max_per_agent": self.config.max_per_agent,
-                "max_global": self.config.max_global,
-                "total_messages": len(self.messages),
-                "agents_capped": [
-                    agent_name
-                    for agent_name, count in sorted(per_agent.items())
-                    if count >= self.config.max_per_agent
-                ],
-            }
+    def _per_agent_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for message in self.messages:
+            counts[message["agent_name"]] = counts.get(message["agent_name"], 0) + 1
+        return counts
 
 
 class FakeHubHandler(BaseHTTPRequestHandler):
@@ -106,22 +197,24 @@ class FakeHubHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
         try:
             if parsed.path == "/":
                 self._handle_index()
                 return
+            self._require_password(params)
             if parsed.path == "/api/messages":
-                self._require_password(parse_qs(parsed.query))
-                self._handle_messages(parsed.query)
+                self._handle_messages(params)
                 return
-            if parsed.path == "/api/stats":
-                self._require_password(parse_qs(parsed.query))
-                self._write_json(self.store.stats())
+            if parsed.path == "/api/files":
+                self._handle_get_files(params)
+                return
+            if parsed.path == "/api/billboard":
+                self._write_json(self.store.get_billboard())
                 return
             if parsed.path == "/api/dump":
-                self._require_password(parse_qs(parsed.query))
                 self._write_json(
-                    {"messages": self.store.dump_messages(), "stats": self.store.stats()}
+                    {"messages": self.store.dump_messages(), "stats": self.store.state()}
                 )
                 return
             self._write_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -131,35 +224,75 @@ class FakeHubHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         try:
-            if parsed.path not in {"/api/message", "/api/seed"}:
-                self._write_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-                return
-
             body = self._read_json_body()
             self._require_password(body)
-            message = self.store.add_message(
-                agent_name=str(body.get("agent_name", "")),
-                content=str(body.get("content", "")),
-            )
-            self._write_json({"status": "ok", "seq": message["seq"]})
+            if parsed.path in {"/api/message", "/api/seed"}:
+                message = self.store.add_message(
+                    agent_name=str(body.get("agent_name", "")),
+                    content=str(body.get("content", "")),
+                )
+                self._write_json(
+                    {
+                        "ok": True,
+                        "status": "ok",
+                        "seq": message["seq"],
+                        "paused": self.store.paused,
+                        "manager": self.store.manager,
+                        "allowed_agents": dict(self.store.allowed_agents),
+                    }
+                )
+                return
+            if parsed.path == "/api/files":
+                result = self.store.upload_file(
+                    agent_name=str(body.get("agent_name", "")),
+                    filename=str(body.get("filename", "")),
+                    content=str(body.get("content", "")),
+                )
+                self._write_json(result)
+                return
+            if parsed.path == "/api/billboard":
+                self._write_json(
+                    self.store.set_billboard(
+                        content=str(body.get("content", "")),
+                        updated_by=str(body.get("agent_name", "")),
+                    )
+                )
+                return
+            if parsed.path == "/api/control":
+                self.store.set_controls(
+                    paused=body.get("paused"),
+                    manager=body.get("manager"),
+                    allowed_agents=body.get("allowed_agents"),
+                )
+                self._write_json({"ok": True})
+                return
+            self._write_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         except FakeHubError as exc:
             self._write_json({"error": str(exc)}, exc.status)
 
     def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format % args}", flush=True)
 
-    def _handle_messages(self, query: str) -> None:
-        params = parse_qs(query)
+    def _handle_messages(self, params: dict[str, list[str]]) -> None:
         since_values = params.get("since", ["0"])
         try:
             since = int(since_values[0])
         except ValueError as exc:
             raise FakeHubError("since must be an integer", HTTPStatus.BAD_REQUEST) from exc
-        self._write_json({"messages": self.store.get_messages_since(since)})
+        self._write_json(
+            {"messages": self.store.get_messages_since(since), "stats": self.store.state()}
+        )
+
+    def _handle_get_files(self, params: dict[str, list[str]]) -> None:
+        filename = _first_value(params.get("filename"))
+        if filename:
+            self._write_json(self.store.read_file(filename))
+            return
+        self._write_json({"files": self.store.list_files()})
 
     def _handle_index(self) -> None:
         messages = self.store.dump_messages()
-        stats = self.store.stats()
+        state = self.store.state()
         rows = "\n".join(
             "<tr>"
             f"<td>{message['seq']}</td>"
@@ -169,6 +302,7 @@ class FakeHubHandler(BaseHTTPRequestHandler):
             "</tr>"
             for message in messages
         )
+        file_names = ", ".join(html.escape(file["filename"]) for file in state["files"]) or "none"
         body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -184,7 +318,8 @@ class FakeHubHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <h1>Fake Hub</h1>
-  <p>Messages: {stats["total_messages"]} / {stats["max_global"]}</p>
+  <p>Messages: {len(messages)} / {self.store.config.max_global}</p>
+  <p>Shared files: {file_names}</p>
   <p>Use <code>/api/dump?password={html.escape(self.store.config.password)}</code> for JSON.</p>
   <table>
     <thead><tr><th>Seq</th><th>Timestamp</th><th>Agent</th><th>Content</th></tr></thead>
@@ -260,6 +395,10 @@ def main() -> None:
     )
     print(f"fake hub listening on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()
+
+
+def _now() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _first_value(value: Any) -> str | None:

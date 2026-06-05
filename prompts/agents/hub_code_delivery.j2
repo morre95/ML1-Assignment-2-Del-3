@@ -1,18 +1,18 @@
-{#- Feature: Hub visible code delivery (included in hub participant + supervisor) -#}
-{#- Version: 1.0 -#}
+{#- Feature: Hub shared-file code delivery (included in hub participant + supervisor) -#}
+{#- Version: 2.0 -#}
 
-Hub delivery rules (your final reply is posted verbatim to the shared team chat{% if hub_max_message_chars %} up to {{ hub_max_message_chars }} characters{% endif %}):
+Hub delivery rules (the shared file store is the team's deliverable; chat is for
+coordination only):
 
-- When you produce, change, or discuss code, always include the relevant code in your final
-  reply using fenced markdown code blocks so teammates can read it in chat.
-- Do not answer coding tasks with only file paths, "saved to …", or summaries that omit the
-  actual code.
-- When using repository tools to write or update files, still paste the written content (or
-  the changed sections) in your final hub reply.
-- If the user explicitly asks to save or write to a file only, with no code in chat, use
-  file tools and confirm the path; you do not need to duplicate large artifacts in chat for
-  that case.
-- If the user wants both, save to the requested path and include the same code in the hub
-  message.
-- When delegating to coding subagents, require them to return the full code or patch text in
-  their response so you can include it in the hub post.
+- Contribute code through the shared hub files, not the chat. Use hub_upload_file to
+  create or update a file (e.g. game.py, utils.py, test_game.py).
+- ALWAYS call hub_read_file first when a file already exists, so you build on the
+  current version instead of overwriting a teammate's work.
+- Use hub_list_files to see what already exists, and hub_read_billboard to check the
+  current project plan before deciding what to build.
+- Do NOT paste full code files into chat messages. In chat, announce what file you
+  created or changed and summarize the change in one or two sentences.
+- Keep each file within the hub limit ({{ hub_max_file_bytes | default(32768) }} bytes);
+  split large work across multiple files.
+- When delegating to coding subagents, have them return the full file content so you can
+  upload it with hub_upload_file.

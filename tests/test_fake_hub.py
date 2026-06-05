@@ -55,8 +55,9 @@ def test_fake_hub_accepts_seed_and_fetches_messages_since(fake_hub_url: str) -> 
         timeout=5,
     )
 
-    assert first.json() == {"status": "ok", "seq": 1}
-    assert second.json() == {"status": "ok", "seq": 2}
+    assert first.json()["seq"] == 1
+    assert first.json()["ok"] is True
+    assert second.json()["seq"] == 2
     assert response.status_code == 200
     assert response.json()["messages"] == [
         {
@@ -68,16 +69,16 @@ def test_fake_hub_accepts_seed_and_fetches_messages_since(fake_hub_url: str) -> 
     ]
 
 
-def test_fake_hub_stats_dump_and_html_view(fake_hub_url: str) -> None:
+def test_fake_hub_embeds_state_in_messages_and_dump(fake_hub_url: str) -> None:
     requests.post(
         f"{fake_hub_url}/api/message",
         json={"agent_name": "agent", "content": "reply", "password": PASSWORD},
         timeout=5,
     )
 
-    stats = requests.get(
-        f"{fake_hub_url}/api/stats",
-        params={"password": PASSWORD},
+    messages = requests.get(
+        f"{fake_hub_url}/api/messages",
+        params={"since": 0, "password": PASSWORD},
         timeout=5,
     )
     dump = requests.get(
@@ -87,23 +88,64 @@ def test_fake_hub_stats_dump_and_html_view(fake_hub_url: str) -> None:
     )
     html = requests.get(fake_hub_url, timeout=5)
 
-    assert stats.json() == {
-        "per_agent": {"agent": 1},
-        "max_per_agent": 2,
-        "max_global": 5,
-        "total_messages": 1,
-        "agents_capped": [],
-    }
+    stats = messages.json()["stats"]
+    assert stats["paused"] is False
+    assert stats["allowed_agents"] == {}
+    assert stats["files"] == []
     assert dump.json()["messages"][0]["content"] == "reply"
     assert html.status_code == 200
     assert "text/html" in html.headers["Content-Type"]
     assert "reply" in html.text
 
 
+def test_fake_hub_files_upload_list_and_read(fake_hub_url: str) -> None:
+    upload = requests.post(
+        f"{fake_hub_url}/api/files",
+        json={
+            "agent_name": "agent",
+            "filename": "game.py",
+            "content": "print('hi')",
+            "password": PASSWORD,
+        },
+        timeout=5,
+    )
+    listing = requests.get(
+        f"{fake_hub_url}/api/files",
+        params={"password": PASSWORD},
+        timeout=5,
+    )
+    read = requests.get(
+        f"{fake_hub_url}/api/files",
+        params={"filename": "game.py", "password": PASSWORD},
+        timeout=5,
+    )
+
+    assert upload.json() == {"ok": True, "filename": "game.py"}
+    assert listing.json()["files"][0]["filename"] == "game.py"
+    assert listing.json()["files"][0]["author"] == "agent"
+    assert read.json()["content"] == "print('hi')"
+
+
+def test_fake_hub_billboard_round_trip(fake_hub_url: str) -> None:
+    requests.post(
+        f"{fake_hub_url}/api/billboard",
+        json={"agent_name": "manager", "content": "Build a guessing game", "password": PASSWORD},
+        timeout=5,
+    )
+    billboard = requests.get(
+        f"{fake_hub_url}/api/billboard",
+        params={"password": PASSWORD},
+        timeout=5,
+    )
+
+    assert billboard.json()["content"] == "Build a guessing game"
+    assert billboard.json()["updated_by"] == "manager"
+
+
 def test_fake_hub_rejects_wrong_password(fake_hub_url: str) -> None:
     response = requests.get(
-        f"{fake_hub_url}/api/stats",
-        params={"password": "wrong"},
+        f"{fake_hub_url}/api/messages",
+        params={"since": 0, "password": "wrong"},
         timeout=5,
     )
 
@@ -147,15 +189,9 @@ def test_fake_hub_enforces_per_agent_cap(fake_hub_url: str) -> None:
         json={"agent_name": "agent", "content": "message 3", "password": PASSWORD},
         timeout=5,
     )
-    stats = requests.get(
-        f"{fake_hub_url}/api/stats",
-        params={"password": PASSWORD},
-        timeout=5,
-    )
 
     assert capped.status_code == 429
     assert capped.json() == {"error": "agent message cap reached"}
-    assert stats.json()["agents_capped"] == ["agent"]
 
 
 def test_fake_hub_enforces_global_cap() -> None:
@@ -198,14 +234,16 @@ def test_runpod_hub_client_works_against_fake_hub(fake_hub_url: str) -> None:
         timeout_seconds=5,
     )
 
+    client.upload_file("agent", "game.py", "print('hi')")
     post_response = client.post_message("agent", "hello")
     messages_response = client.fetch_messages(since=0)
-    stats = client.fetch_stats()
+    state = client.fetch_state()
 
     assert post_response.status == "ok"
     assert post_response.seq == 1
     assert messages_response.messages[0].agent_name == "agent"
-    assert stats.total_messages == 1
+    assert state.files[0].filename == "game.py"
+    assert client.read_file("game.py").content == "print('hi')"
 
 
 def test_runpod_hub_client_maps_fake_hub_errors(fake_hub_url: str) -> None:
@@ -223,7 +261,7 @@ def test_runpod_hub_client_maps_fake_hub_errors(fake_hub_url: str) -> None:
     )
 
     with pytest.raises(HubAuthenticationError):
-        wrong_password_client.fetch_stats()
+        wrong_password_client.fetch_state()
     with pytest.raises(HubClientError):
         client.fetch_messages(since="bad")  # type: ignore[arg-type]
 
